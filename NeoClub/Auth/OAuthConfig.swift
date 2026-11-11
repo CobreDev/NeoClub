@@ -19,9 +19,20 @@ struct PKCE {
     let state: String
 
     init() {
-        verifier = Self.random(64).base64URLEncoded(padded: false)
-        challenge = Data(SHA256.hash(data: Data(verifier.utf8))).base64URLEncoded(padded: true)
-        state = Self.random(16).base64URLEncoded(padded: false)
+        // The official app uses an 80-char alphanumeric verifier; Salesforce rejects others in practice.
+        verifier = Self.alphanumeric(80)
+        challenge = Self.challenge(for: verifier)
+        state = Self.alphanumeric(32)
+    }
+
+    static func challenge(for verifier: String) -> String {
+        Data(SHA256.hash(data: Data(verifier.utf8))).base64URLEncoded(padded: true)
+    }
+
+    private static func alphanumeric(_ count: Int) -> String {
+        let chars = Array("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789")
+        var rng = SystemRandomNumberGenerator()
+        return String((0..<count).map { _ in chars[Int(rng.next(upperBound: UInt(chars.count)))] })
     }
 
     func authorizeURL() -> URL {
@@ -38,11 +49,6 @@ struct PKCE {
         return c.url!
     }
 
-    private static func random(_ count: Int) -> Data {
-        var bytes = [UInt8](repeating: 0, count: count)
-        _ = SecRandomCopyBytes(kSecRandomDefault, count, &bytes)
-        return Data(bytes)
-    }
 }
 
 extension Data {
@@ -55,9 +61,10 @@ extension Data {
 }
 
 /// Strict application/x-www-form-urlencoded encoding (URLComponents leaves "=", "&" and "+" alone).
+/// Only RFC 3986 unreserved characters pass through unescaped.
 func formEncode(_ fields: [String: String]) -> Data {
-    var allowed = CharacterSet.alphanumerics
-    allowed.insert(charactersIn: "-._*")
+    var allowed = CharacterSet()
+    allowed.insert(charactersIn: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~")
     return fields.map { k, v in
         "\(k.addingPercentEncoding(withAllowedCharacters: allowed)!)=\(v.addingPercentEncoding(withAllowedCharacters: allowed)!)"
     }

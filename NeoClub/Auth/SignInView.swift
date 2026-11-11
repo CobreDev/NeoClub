@@ -86,6 +86,8 @@ struct SignInView: View {
     private func finish(code: String) async {
         isExchanging = true
         defer { isExchanging = false }
+        // Public values only: confirms the verifier matches the challenge that was sent.
+        SignInLog.write("exchange: sent challenge \(pkce.challenge.prefix(8)), verifier hashes to \(PKCE.challenge(for: pkce.verifier).prefix(8))")
         do {
             try await AuthService.shared.exchange(code: code, verifier: pkce.verifier)
             await app.didSignIn()
@@ -111,6 +113,9 @@ struct OAuthWebView: UIViewRepresentable {
         config.websiteDataStore = .nonPersistent()
         let web = WKWebView(frame: .zero, configuration: config)
         web.navigationDelegate = context.coordinator
+        let sent = URLComponents(url: url, resolvingAgainstBaseURL: false)?
+            .queryItems?.first { $0.name == "code_challenge" }?.value ?? "?"
+        SignInLog.write("authorize: loading challenge \(sent.prefix(8))")
         web.load(URLRequest(url: url, timeoutInterval: 20))
         context.coordinator.armTimeout()
         return web
