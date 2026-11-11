@@ -222,7 +222,7 @@ final class AudioPlayer {
         guard let episode else { return }
         var info: [String: Any] = [
             MPMediaItemPropertyTitle: episode.title,
-            MPMediaItemPropertyAlbumTitle: episode.albumName ?? "Adventures in Odyssey",
+            MPMediaItemPropertyAlbumTitle: episode.albumTitle ?? "Adventures in Odyssey",
             MPMediaItemPropertyArtist: "Adventures in Odyssey",
             MPMediaItemPropertyPlaybackDuration: duration,
             MPNowPlayingInfoPropertyElapsedPlaybackTime: position,

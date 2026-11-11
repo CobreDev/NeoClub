@@ -10,9 +10,7 @@ struct NowPlayingView: View {
     private let speeds: [Float] = [0.75, 1.0, 1.25, 1.5, 2.0]
 
     var body: some View {
-        ZStack {
-            background
-            VStack(spacing: 0) {
+        VStack(spacing: 0) {
                 Capsule().fill(.white.opacity(0.4)).frame(width: 40, height: 5).padding(.top, 10)
                 Spacer(minLength: 20)
                 Artwork(url: player.episode?.artworkURL, cornerRadius: 14)
@@ -27,24 +25,26 @@ struct NowPlayingView: View {
                 transport.padding(.top, 18)
                 bottomBar.padding(.top, 26)
                 Spacer(minLength: 16)
-            }
-            .padding(.horizontal, 28)
-            .foregroundStyle(.white)
         }
+        .padding(.horizontal, 28)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .foregroundStyle(.white)
+        // Backdrop lives in .background so the oversized blurred art can't widen the layout.
+        .background { background }
         .presentationDragIndicator(.hidden)
         .presentationBackground(Color.aioNavy)
     }
 
     private var background: some View {
-        ZStack {
-            Color.aioNavy
-            Artwork(url: player.episode?.artworkURL, cornerRadius: 0)
-                .scaledToFill()
-                .blur(radius: 60)
-                .opacity(0.55)
-            LinearGradient(colors: [.clear, .black.opacity(0.35)], startPoint: .top, endPoint: .bottom)
-        }
-        .ignoresSafeArea()
+        Color.aioNavy
+            .overlay {
+                AsyncImage(url: player.episode?.artworkURL) { $0.resizable().scaledToFill() } placeholder: { Color.clear }
+                    .blur(radius: 60)
+                    .opacity(0.55)
+            }
+            .overlay(LinearGradient(colors: [.clear, .black.opacity(0.35)], startPoint: .top, endPoint: .bottom))
+            .clipped()
+            .ignoresSafeArea()
     }
 
     private var titleBlock: some View {
@@ -53,7 +53,7 @@ struct NowPlayingView: View {
                 Text(player.episode?.title ?? "")
                     .font(.universBold(22, relativeTo: .title2))
                     .lineLimit(2)
-                Text(player.episode?.albumName ?? "Adventures in Odyssey")
+                Text(player.episode?.albumTitle ?? "Adventures in Odyssey")
                     .font(.univers(17))
                     .opacity(0.7)
                     .lineLimit(1)

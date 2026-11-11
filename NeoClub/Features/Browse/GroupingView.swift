@@ -11,6 +11,7 @@ struct GroupingView: View {
 
     private var shown: Grouping? { grouping ?? preview }
     private var episodes: [Episode] { shown?.contentList ?? [] }
+    private var playable: [Episode] { episodes.filter(\.isPlayable) }
 
     var body: some View {
         List {
@@ -76,7 +77,7 @@ struct GroupingView: View {
     private var metaLine: String {
         var parts: [String] = []
         if let type = shown?.type { parts.append(type == "Podcast Year" ? "Podcasts" : type) }
-        if !episodes.isEmpty { parts.append("\(episodes.count) episodes") }
+        if !episodes.isEmpty { parts.append(episodes.count == 1 ? "1 episode" : "\(episodes.count) episodes") }
         let total = episodes.compactMap(\.mediaLength).reduce(0, +)
         if total > 0 { parts.append(total.msDurationText) }
         return parts.joined(separator: " · ")
@@ -84,9 +85,9 @@ struct GroupingView: View {
 
     /// Where the profile is in this album: the episode in progress, else the first unplayed one.
     private var continueEpisode: Episode? {
-        episodes.first { player.progress(for: $0)?.isInProgress == true }
-            ?? episodes.first { player.progress(for: $0)?.isComplete != true }
-            ?? episodes.first
+        playable.first { player.progress(for: $0)?.isInProgress == true }
+            ?? playable.first { player.progress(for: $0)?.isComplete != true }
+            ?? playable.first
     }
 
     private func continueLabel(_ e: Episode) -> String {
@@ -97,8 +98,8 @@ struct GroupingView: View {
 
     private func play(_ episode: Episode) {
         if player.episode?.id == episode.id { player.togglePlayPause(); return }
-        let i = episodes.firstIndex(of: episode) ?? 0
-        player.play(episode, queue: Array(episodes.dropFirst(i + 1)), groupingID: groupingID)
+        let i = playable.firstIndex(of: episode) ?? 0
+        player.play(episode, queue: Array(playable.dropFirst(i + 1)), groupingID: groupingID)
     }
 
     private func load() async {

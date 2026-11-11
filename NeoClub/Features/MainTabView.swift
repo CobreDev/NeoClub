@@ -43,7 +43,7 @@ struct MiniPlayer: View {
                 Text(player.episode?.title ?? "")
                     .font(.universBold(14, relativeTo: .subheadline))
                     .lineLimit(1)
-                if placement != .inline, let album = player.episode?.albumName {
+                if placement != .inline, let album = player.episode?.albumTitle {
                     Text(album).font(.univers(12, relativeTo: .caption)).foregroundStyle(.secondary).lineLimit(1)
                 }
             }

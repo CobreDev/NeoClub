@@ -139,13 +139,13 @@ struct EpisodeRow: View {
                         .lineLimit(2)
                 }
                 HStack(spacing: 10) {
-                    Button(action: onPlay) {
+                    if episode.isPlayable { Button(action: onPlay) {
                         Label(playLabel, systemImage: isCurrent && player.isPlaying ? "pause.fill" : "play.fill")
                             .font(.universBold(13, relativeTo: .footnote))
                     }
                     .buttonStyle(.bordered)
                     .buttonBorderShape(.capsule)
-                    .controlSize(.small)
+                    .controlSize(.small) }
                     ProgressIndicator(progress: player.progress(for: episode), durationMs: episode.mediaLength)
                     Spacer()
                     if downloads.isDownloaded(episode.id) {

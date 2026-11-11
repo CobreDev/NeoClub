@@ -92,7 +92,20 @@ struct Episode: Decodable, Identifiable, Hashable {
     let characters: [CastMember]?
     let inAlbum: [Episode]?
 
-    var title: String { name ?? shortName ?? "Episode" }
+    /// Display title without a leading "#1035: " (the number is shown separately).
+    var title: String {
+        let raw = name ?? shortName ?? "Episode"
+        guard raw.hasPrefix("#"), let colon = raw.firstIndex(of: ":"),
+              raw[raw.index(after: raw.startIndex)..<colon].allSatisfy(\.isNumber) else { return raw }
+        return raw[raw.index(after: colon)...].trimmingCharacters(in: .whitespaces)
+    }
+    /// Album name, ignoring the server quirk where it repeats the type (e.g. "Episode").
+    var albumTitle: String? {
+        guard let a = albumName, !a.isEmpty, a != subtype, a != type else { return nil }
+        return a
+    }
+    /// Only audio and video have playable media; articles and others don't.
+    var isPlayable: Bool { type == nil || type == "Audio" || type == "Video" }
     var isAudio: Bool { type == "Audio" }
     var artworkURL: URL? { .aio(thumbnailLarge ?? thumbnailMedium ?? thumbnailSmall) }
     var smallArtworkURL: URL? { .aio(thumbnailMedium ?? thumbnailSmall ?? thumbnailLarge) }

@@ -20,7 +20,7 @@ struct EpisodeView: View {
                     Artwork(url: shown.artworkURL, cornerRadius: 14)
                         .frame(maxWidth: 280)
                         .shadow(color: .black.opacity(0.2), radius: 18, y: 10)
-                    if let album = shown.albumName {
+                    if let album = shown.albumTitle {
                         Text(album.uppercased())
                             .font(.universBold(12, relativeTo: .caption))
                             .foregroundStyle(.secondary)
@@ -92,6 +92,7 @@ struct EpisodeView: View {
 
     private var actions: some View {
         HStack(spacing: 12) {
+            if shown.isPlayable {
             Button {
                 if isCurrent { player.togglePlayPause() } else { player.play(shown, queue: queueAfter, groupingID: groupingID) }
             } label: {
@@ -103,6 +104,7 @@ struct EpisodeView: View {
             .buttonStyle(.glassProminent)
 
             downloadButton
+            }
         }
         .padding(.top, 4)
     }
