@@ -25,6 +25,7 @@ actor AuthService {
 
     private(set) var tokens: Tokens? = Keychain.getCodable(Tokens.self, for: AuthService.keychainKey)
     private var refreshTask: Task<Tokens, Error>?
+    private let tokenSession = URLSession(configuration: .ephemeral)
 
     var isSignedIn: Bool { tokens != nil }
 
@@ -90,7 +91,13 @@ actor AuthService {
         req.httpMethod = "POST"
         req.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
         req.httpBody = formEncode(fields)
-        let (data, _) = try await URLSession.shared.data(for: req)
+        let data: Data
+        do {
+            (data, _) = try await tokenSession.data(for: req)
+        } catch let error as URLError where error.code == .networkConnectionLost {
+            // Stale pooled connection (common on the simulator): retry once on a fresh connection.
+            (data, _) = try await tokenSession.data(for: req)
+        }
         return (try? JSONSerialization.jsonObject(with: data) as? [String: Any]) ?? [:]
     }
 }
