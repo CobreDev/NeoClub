@@ -10,8 +10,8 @@ extension Color {
     static let aioYellow = Color(hex: 0xF9D548)
     static let aioRed = Color(hex: 0xD80000)
 
-    /// App-wide tint: the official club yellow (the app always uses the dark, branded-blue look).
-    static let aioTint = aioYellow
+    /// App-wide tint: the club's AIO blue (#0082C6), lightened so it reads on the navy backgrounds.
+    static let aioTint = Color(hex: 0x4DB8F0)
 
     init(hex: UInt32) {
         self.init(.sRGB,

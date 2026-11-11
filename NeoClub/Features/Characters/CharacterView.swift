@@ -30,10 +30,8 @@ struct CharacterView: View {
                         if let actorID = shown?.voicedByID, !actorID.isEmpty {
                             NavigationLink(value: Route.author(id: actorID, preview: nil)) {
                                 Label("Voiced by \(actor)", systemImage: "mic.fill").font(.universBold(15))
-                                    .foregroundStyle(Color.aioYellow)
-                            }
+                                    }
                             .buttonStyle(.bordered)
-                            .tint(.white)
                         } else {
                             Label("Voiced by \(actor)", systemImage: "mic.fill").font(.univers(15)).foregroundStyle(.secondary)
                         }
