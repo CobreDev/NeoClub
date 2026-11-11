@@ -5,7 +5,6 @@ import WebKit
 /// The redirect is an https URL on a domain we don't own, so ASWebAuthenticationSession can't catch it.
 struct SignInView: View {
     @Environment(AppModel.self) private var app
-    @State private var pkce = PKCE()
     @State private var error: String?
     @State private var isExchanging = false
     @State private var showingWeb = false
@@ -28,7 +27,6 @@ struct SignInView: View {
             }
             Spacer()
             Button {
-                pkce = PKCE()
                 error = nil
                 webError = nil
                 webAttempt = UUID()
@@ -48,10 +46,11 @@ struct SignInView: View {
         .sheet(isPresented: $showingWeb) {
             NavigationStack {
                 ZStack {
-                    OAuthWebView(url: pkce.authorizeURL(), expectedState: pkce.state,
-                                 onCode: { code in
+                    // Each web view instance generates and owns its PKCE pair, and returns the
+                    // verifier with the code, so the two halves can never come from different attempts.
+                    OAuthWebView(onCode: { code, verifier in
                                      showingWeb = false
-                                     Task { await finish(code: code) }
+                                     Task { await finish(code: code, verifier: verifier) }
                                  },
                                  onFailure: { webError = $0 })
                     .id(webAttempt)
@@ -63,7 +62,6 @@ struct SignInView: View {
                             Text(webError)
                         } actions: {
                             Button("Retry") {
-                                pkce = PKCE()
                                 self.webError = nil
                                 webAttempt = UUID()
                             }
@@ -83,13 +81,12 @@ struct SignInView: View {
         }
     }
 
-    private func finish(code: String) async {
+    private func finish(code: String, verifier: String) async {
         isExchanging = true
         defer { isExchanging = false }
-        // Public values only: confirms the verifier matches the challenge that was sent.
-        SignInLog.write("exchange: sent challenge \(pkce.challenge.prefix(8)), verifier hashes to \(PKCE.challenge(for: pkce.verifier).prefix(8))")
+        SignInLog.write("exchange: verifier hashes to \(PKCE.challenge(for: verifier).prefix(8))")
         do {
-            try await AuthService.shared.exchange(code: code, verifier: pkce.verifier)
+            try await AuthService.shared.exchange(code: code, verifier: verifier)
             await app.didSignIn()
         } catch {
             self.error = error.localizedDescription
@@ -98,13 +95,11 @@ struct SignInView: View {
 }
 
 struct OAuthWebView: UIViewRepresentable {
-    let url: URL
-    let expectedState: String
-    let onCode: (String) -> Void
+    let onCode: (_ code: String, _ verifier: String) -> Void
     let onFailure: (String) -> Void
 
     func makeCoordinator() -> Coordinator {
-        Coordinator(expectedState: expectedState, onCode: onCode, onFailure: onFailure)
+        Coordinator(pkce: PKCE(), onCode: onCode, onFailure: onFailure)
     }
 
     func makeUIView(context: Context) -> WKWebView {
@@ -113,10 +108,9 @@ struct OAuthWebView: UIViewRepresentable {
         config.websiteDataStore = .nonPersistent()
         let web = WKWebView(frame: .zero, configuration: config)
         web.navigationDelegate = context.coordinator
-        let sent = URLComponents(url: url, resolvingAgainstBaseURL: false)?
-            .queryItems?.first { $0.name == "code_challenge" }?.value ?? "?"
-        SignInLog.write("authorize: loading challenge \(sent.prefix(8))")
-        web.load(URLRequest(url: url, timeoutInterval: 20))
+        let pkce = context.coordinator.pkce
+        SignInLog.write("authorize: loading challenge \(pkce.challenge.prefix(8))")
+        web.load(URLRequest(url: pkce.authorizeURL(), timeoutInterval: 20))
         context.coordinator.armTimeout()
         return web
     }
@@ -129,14 +123,15 @@ struct OAuthWebView: UIViewRepresentable {
     func updateUIView(_ uiView: WKWebView, context: Context) {}
 
     final class Coordinator: NSObject, WKNavigationDelegate {
-        let expectedState: String
-        let onCode: (String) -> Void
+        let pkce: PKCE
+        let onCode: (_ code: String, _ verifier: String) -> Void
         let onFailure: (String) -> Void
         private var handled = false
         var timeout: DispatchWorkItem?
 
-        init(expectedState: String, onCode: @escaping (String) -> Void, onFailure: @escaping (String) -> Void) {
-            self.expectedState = expectedState
+        init(pkce: PKCE, onCode: @escaping (_ code: String, _ verifier: String) -> Void,
+             onFailure: @escaping (String) -> Void) {
+            self.pkce = pkce
             self.onCode = onCode
             self.onFailure = onFailure
         }
@@ -187,9 +182,10 @@ struct OAuthWebView: UIViewRepresentable {
             let items = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? []
             let code = items.first { $0.name == "code" }?.value
             let state = items.first { $0.name == "state" }?.value
-            if let code, state == expectedState, !handled {
+            if let code, state == pkce.state, !handled {
                 handled = true
-                onCode(code)
+                timeout?.cancel()
+                onCode(code, pkce.verifier)
             }
         }
     }
