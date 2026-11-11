@@ -138,7 +138,10 @@ private struct CarouselView: View {
                             }
                         }
                         .clipShape(.rect(cornerRadius: 16))
-                        .containerRelativeFrame(.horizontal) { w, _ in w - 40 }
+                        .containerRelativeFrame(.horizontal) { w, _ in
+                            // Two banners side by side on wide screens (iPhone Duo inner screen, iPad).
+                            w > 700 ? (w - 52) / 2 : w - 40
+                        }
 
                     if let route = CarouselView.route(for: item.hyperlink) {
                         NavigationLink(value: route) { card }.buttonStyle(.plain)

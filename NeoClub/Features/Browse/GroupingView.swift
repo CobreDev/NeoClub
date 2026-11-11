@@ -43,7 +43,7 @@ struct GroupingView: View {
     private var header: some View {
         VStack(spacing: 14) {
             Artwork(url: shown?.artworkURL, cornerRadius: 12)
-                .frame(width: 230, height: 230)
+                .containerRelativeFrame(.vertical) { h, _ in min(230, h * 0.4) }
                 .shadow(color: .black.opacity(0.2), radius: 16, y: 8)
                 .padding(.top, 12)
             VStack(spacing: 4) {

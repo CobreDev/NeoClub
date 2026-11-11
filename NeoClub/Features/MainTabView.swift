@@ -10,14 +10,29 @@ struct MainTabView: View {
     @Environment(BookmarkStore.self) private var bookmarks
     @State private var tab: TabID = NetworkMonitor.shared.isOnline ? .home : .library
     @State private var paths: [TabID: NavigationPath] = [:]
+    /// Lets Now Playing zoom out of the mini player and back into it, like Apple Music.
+    @Namespace private var playerTransition
 
     private func path(_ id: TabID) -> Binding<NavigationPath> {
         Binding(get: { paths[id] ?? NavigationPath() }, set: { paths[id] = $0 })
     }
 
     var body: some View {
+        tabs
+        #if DEBUG
+        // Developer convenience: `-debugResumeLast` resumes the most recent episode on launch (progress sync is off in debug).
+        .task {
+            if ProcessInfo.processInfo.arguments.contains("-debugResumeLast"), !player.hasItem,
+               let last = player.history.first {
+                player.playFromHistory(last)
+            }
+        }
+        #endif
+    }
+
+    private var tabs: some View {
         @Bindable var player = player
-        TabView(selection: $tab) {
+        return TabView(selection: $tab) {
             Tab("Home", systemImage: "house.fill", value: .home) {
                 NavigationStack(path: path(.home)) { HomeView().aioDestinations() }
             }
@@ -42,12 +57,18 @@ struct MainTabView: View {
         .onChange(of: network.isOnline) { _, online in
             if !online && tab != .library { tab = .library }
         }
+        // Tab bar on phones and the outer screen; sidebar on the big inner screen.
+        .tabViewStyle(.sidebarAdaptable)
         .tabBarMinimizeBehavior(.onScrollDown)
         .tabViewBottomAccessory(isEnabled: player.hasItem) {
             MiniPlayer()
+                .matchedTransitionSource(id: "nowPlaying", in: playerTransition)
         }
-        .sheet(isPresented: $player.showNowPlaying) {
+        // Full-screen like Apple Music: zooms out of the mini player and swipes down back into it
+        // (the zoom transition provides the interactive dismiss).
+        .fullScreenCover(isPresented: $player.showNowPlaying) {
             NowPlayingView()
+                .navigationTransition(.zoom(sourceID: "nowPlaying", in: playerTransition))
         }
         .alert("Bookmark", isPresented: Binding(
             get: { bookmarks.actionError != nil },

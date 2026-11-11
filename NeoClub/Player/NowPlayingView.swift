@@ -2,50 +2,166 @@ import AVKit
 import MediaPlayer
 import SwiftUI
 
-/// Full-screen player matching Apple Podcasts / Music layout and proportions, in AIO typefaces:
-/// artwork (or Info / Up Next), title row with ⋯, capsule scrubber, transport, volume, bottom bar.
+/// Now Playing card, laid out like Apple Music (iOS 27) on every screen, in AIO typefaces:
+/// - Portrait (phones, the iPhone Duo outer screen, Duo inner screen upright): artwork, title row, scrubber,
+///   transport, volume, bottom bar. Up Next / Info replace the artwork under a compact header.
+/// - Landscape inner screen: artwork and controls in a centered column; Up Next / Info open as a column on the right;
+///   the output route sits bottom-left and the Info / Up Next buttons bottom-right.
+/// - Half-folded upright (laptop): artwork or Up Next on the top half, title and controls on the bottom half.
 struct NowPlayingView: View {
     @Environment(AudioPlayer.self) private var player
     @State private var mode: Mode = .artwork
+    @State private var halfFolded = false
 
     enum Mode { case artwork, info, queue }
 
     var body: some View {
-        VStack(spacing: 0) {
-            Capsule().fill(.white.opacity(0.35)).frame(width: 36, height: 5).padding(.top, 7)
+        GeometryReader { geo in
+            let size = geo.size
+            let landscape = size.width > size.height && size.width >= 700
+            Group {
+                if landscape {
+                    landscapeLayout(size)
+                } else if halfFolded {
+                    laptopLayout(size)
+                } else {
+                    portraitLayout(size)
+                }
+            }
+            .frame(width: size.width, height: size.height)
+        }
+        .foregroundStyle(.white)
+        .background { background }
+        .animation(.spring(response: 0.42, dampingFraction: 0.86), value: mode)
+        .animation(.spring(response: 0.45, dampingFraction: 0.9), value: halfFolded)
+        .readsHinge($halfFolded)
+        .presentationDragIndicator(.hidden)
+        .presentationBackground(Color.aioNavy)
+    }
 
+    private var grabber: some View {
+        Capsule().fill(.white.opacity(0.35)).frame(width: 36, height: 5).padding(.top, 7)
+    }
+
+    // MARK: Layouts
+
+    private func portraitLayout(_ size: CGSize) -> some View {
+        // Phones use ~28pt margins and full-width artwork; the big inner screen centers a ~520pt column.
+        let large = size.width > 600
+        let content = min(size.width - 56, 520)
+        return VStack(spacing: 0) {
+            grabber
             if mode == .artwork {
                 Spacer(minLength: 12)
-                Artwork(url: player.episode?.artworkURL, cornerRadius: 10)
-                    .shadow(color: .black.opacity(player.isPlaying ? 0.45 : 0.2), radius: player.isPlaying ? 28 : 10, y: 14)
-                    .scaleEffect(player.isPlaying ? 1 : 0.78)
-                    .animation(.spring(response: 0.5, dampingFraction: 0.7), value: player.isPlaying)
-                    .frame(maxWidth: 520)
-                    .transition(.scale(scale: 0.4, anchor: .topLeading).combined(with: .opacity))
+                bigArtwork.frame(width: large ? min(380, content) : content)
                 Spacer(minLength: 28)
                 titleRow
             } else {
                 compactHeader.padding(.top, 22)
-                Group {
-                    if mode == .info { InfoPanel() } else { QueuePanel() }
-                }
-                .padding(.top, 18)
-                .frame(maxHeight: .infinity)
-                .transition(.opacity)
+                panel.padding(.top, 18).frame(maxHeight: .infinity)
             }
-
             ScrubberBar().padding(.top, mode == .artwork ? 22 : 12)
-            transport.padding(.top, 22)
-            VolumeBar().padding(.top, 26)
-            bottomBar.padding(.top, 26).padding(.bottom, 6)
+            transport.padding(.top, large ? 34 : 22)
+            VolumeBar().padding(.top, large ? 40 : 26)
+            bottomBar.padding(.top, large ? 34 : 26).padding(.bottom, 6)
         }
-        .padding(.horizontal, 28)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .foregroundStyle(.white)
-        .background { background }
-        .animation(.spring(response: 0.42, dampingFraction: 0.86), value: mode)
-        .presentationDragIndicator(.hidden)
-        .presentationBackground(Color.aioNavy)
+        .frame(width: content)
+        .frame(maxWidth: .infinity)
+    }
+
+    private func laptopLayout(_ size: CGSize) -> some View {
+        // The top half stands upright to look at; the controls sit on the bottom half, below the crease.
+        let content = min(size.width - 56, 520)
+        let half = size.height / 2
+        return VStack(spacing: 0) {
+            Group {
+                if mode == .artwork {
+                    bigArtwork.frame(width: min(content, half - 60))
+                } else {
+                    panel.padding(.top, 20)
+                }
+            }
+            .frame(height: half)
+
+            VStack(spacing: 0) {
+                if mode == .artwork { titleRow } else { compactHeader }
+                Spacer(minLength: 10)
+                ScrubberBar()
+                Spacer(minLength: 10)
+                transport
+                Spacer(minLength: 10)
+                VolumeBar()
+                Spacer(minLength: 10)
+                bottomBar.padding(.bottom, 6)
+            }
+            .padding(.top, 24)
+            .frame(height: half)
+        }
+        .frame(width: content)
+        .frame(maxWidth: .infinity)
+    }
+
+    private func landscapeLayout(_ size: CGSize) -> some View {
+        let column: CGFloat = 400
+        let art = min(250, size.height * 0.36)
+        return VStack(spacing: 0) {
+            grabber
+            HStack(spacing: 0) {
+                VStack(spacing: 0) {
+                    Spacer(minLength: 8)
+                    bigArtwork.frame(width: art)
+                    Spacer(minLength: 20)
+                    titleRow
+                    ScrubberBar().padding(.top, 18)
+                    transport.padding(.top, 18)
+                    VolumeBar().padding(.top, 22)
+                    Spacer(minLength: 8)
+                }
+                .frame(width: column)
+                .frame(maxWidth: .infinity)
+
+                if mode != .artwork {
+                    panel
+                        .padding(.top, 20)
+                        .frame(width: min(size.width * 0.42, 460))
+                        .padding(.trailing, 40)
+                        .transition(.move(edge: .trailing).combined(with: .opacity))
+                }
+            }
+            landscapeBottomBar
+                .padding(.horizontal, 40)
+                .padding(.bottom, 8)
+        }
+    }
+
+    /// Landscape: output route bottom-left, Info and Up Next bottom-right (Apple Music on a wide screen).
+    private var landscapeBottomBar: some View {
+        HStack(spacing: 10) {
+            RoutePicker().frame(width: 30, height: 26)
+            Text(player.outputName)
+                .font(.univers(13, relativeTo: .caption))
+                .opacity(0.6)
+                .lineLimit(1)
+            Spacer()
+            toggle(.info, symbol: "info.circle", label: "About This Episode")
+            toggle(.queue, symbol: "list.bullet", label: "Up Next")
+        }
+        .frame(height: 44)
+    }
+
+    private var bigArtwork: some View {
+        Artwork(url: player.episode?.artworkURL, cornerRadius: 10)
+            .shadow(color: .black.opacity(player.isPlaying ? 0.45 : 0.2), radius: player.isPlaying ? 28 : 10, y: 14)
+            .scaleEffect(player.isPlaying ? 1 : 0.78)
+            .animation(.spring(response: 0.5, dampingFraction: 0.7), value: player.isPlaying)
+            .transition(.scale(scale: 0.4, anchor: .topLeading).combined(with: .opacity))
+    }
+
+    private var panel: some View {
+        Group {
+            if mode == .info { InfoPanel() } else { QueuePanel() }
+        }
+        .transition(.opacity)
     }
 
     // MARK: Pieces
@@ -76,6 +192,7 @@ struct NowPlayingView: View {
                     .lineLimit(1)
             }
             Spacer(minLength: 0)
+            NowPlayingBookmark()
             EpisodeMenu()
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -93,6 +210,7 @@ struct NowPlayingView: View {
                 Text(player.episode?.albumTitle ?? "Adventures in Odyssey").font(.univers(17)).opacity(0.6).lineLimit(1)
             }
             Spacer(minLength: 0)
+            NowPlayingBookmark()
             EpisodeMenu()
         }
     }
@@ -460,4 +578,37 @@ struct RoutePicker: UIViewRepresentable {
         return v
     }
     func updateUIView(_ uiView: AVRoutePickerView, context: Context) {}
+}
+
+/// Bookmark toggle beside ⋯, where Apple Music has its favorite star.
+private struct NowPlayingBookmark: View {
+    @Environment(AudioPlayer.self) private var player
+    @Environment(BookmarkStore.self) private var bookmarks
+
+    var body: some View {
+        if let e = player.episode {
+            let on = bookmarks.isBookmarked(e)
+            Button { bookmarks.toggle(e) } label: {
+                Image(systemName: on ? "bookmark.fill" : "bookmark")
+                    .font(.system(size: 22, weight: .regular))
+                    .frame(width: 32, height: 32)
+                    .contentTransition(.symbolEffect(.replace))
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(on ? "Remove Bookmark" : "Bookmark")
+        }
+    }
+}
+
+private extension View {
+    /// Tracks whether a foldable iPhone (iPhone Duo) is half-folded, via `onHingeChange` (iOS 27.1+).
+    @ViewBuilder func readsHinge(_ halfFolded: Binding<Bool>) -> some View {
+        if #available(iOS 27.1, *) {
+            onHingeChange { _, context in
+                halfFolded.wrappedValue = context.hinge?.status == .partiallyOpen
+            }
+        } else {
+            self
+        }
+    }
 }

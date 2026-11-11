@@ -18,7 +18,8 @@ struct EpisodeView: View {
             VStack(alignment: .leading, spacing: 22) {
                 VStack(spacing: 14) {
                     Artwork(url: shown.artworkURL, cornerRadius: 14)
-                        .frame(maxWidth: 280)
+                        // At most 280pt, and no more than ~45% of a short screen (half-folded iPhone Duo).
+                        .containerRelativeFrame(.vertical) { h, _ in min(280, h * 0.45) }
                         .shadow(color: .black.opacity(0.2), radius: 18, y: 10)
                     if let album = shown.albumTitle {
                         Text(album.uppercased())
