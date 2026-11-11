@@ -47,18 +47,32 @@ struct EpisodeView: View {
                     VStack(alignment: .leading, spacing: 12) {
                         ShelfHeader(title: "Characters").padding(.horizontal, -20)
                         ScrollView(.horizontal, showsIndicators: false) {
-                            HStack(spacing: 16) {
-                                ForEach(cast) { c in
-                                    VStack(spacing: 6) {
-                                        AsyncImage(url: .aio(c.thumbnailSmall)) { $0.resizable().scaledToFill() } placeholder: { Color.aioSky.opacity(0.4) }
-                                            .frame(width: 72, height: 72)
-                                            .clipShape(Circle())
-                                        Text(c.name ?? "")
-                                            .font(.univers(12, relativeTo: .caption))
-                                            .lineLimit(2)
-                                            .multilineTextAlignment(.center)
-                                            .frame(width: 80)
+                            HStack(alignment: .top, spacing: 12) {
+                                ForEach(Array(cast.enumerated()), id: \.offset) { _, c in
+                                    if let cid = c.characterID {
+                                        NavigationLink(value: Route.character(id: cid, preview: c)) {
+                                            PersonChip(name: c.name ?? "", detail: nil, imageURL: c.avatarURL)
+                                        }
+                                        .buttonStyle(.plain)
+                                    } else {
+                                        PersonChip(name: c.name ?? "", detail: nil, imageURL: c.avatarURL)
                                     }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                if let crew = shown.authors, !crew.isEmpty {
+                    VStack(alignment: .leading, spacing: 12) {
+                        ShelfHeader(title: "Cast & Crew").padding(.horizontal, -20)
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            HStack(alignment: .top, spacing: 12) {
+                                ForEach(Array(crew.enumerated()), id: \.offset) { _, a in
+                                    NavigationLink(value: Route.author(id: a.id, preview: a)) {
+                                        PersonChip(name: a.name ?? "", detail: a.role, imageURL: a.imageURL)
+                                    }
+                                    .buttonStyle(.plain)
                                 }
                             }
                         }
@@ -105,6 +119,7 @@ struct EpisodeView: View {
             .aioPrimaryButton()
 
             downloadButton
+            BookmarkButton(episode: shown)
             }
         }
         .padding(.top, 4)

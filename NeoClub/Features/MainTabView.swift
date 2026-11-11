@@ -5,8 +5,10 @@ struct MainTabView: View {
     @Environment(AudioPlayer.self) private var player
     @Environment(DownloadStore.self) private var downloads
 
-    enum TabID: Hashable { case home, browse, downloads, search }
-    @State private var tab: TabID = .home
+    enum TabID: Hashable { case home, browse, library, search }
+    @Environment(NetworkMonitor.self) private var network
+    @Environment(BookmarkStore.self) private var bookmarks
+    @State private var tab: TabID = NetworkMonitor.shared.isOnline ? .home : .library
     @State private var paths: [TabID: NavigationPath] = [:]
 
     private func path(_ id: TabID) -> Binding<NavigationPath> {
@@ -22,8 +24,8 @@ struct MainTabView: View {
             Tab("Browse", systemImage: "square.grid.2x2.fill", value: .browse) {
                 NavigationStack(path: path(.browse)) { BrowseView().aioDestinations() }
             }
-            Tab("Downloads", systemImage: "arrow.down.circle.fill", value: .downloads) {
-                NavigationStack(path: path(.downloads)) { DownloadsView().aioDestinations() }
+            Tab("Library", systemImage: "books.vertical.fill", value: .library) {
+                NavigationStack(path: path(.library)) { LibraryView().aioDestinations() }
             }
             Tab(value: .search, role: .search) {
                 NavigationStack(path: path(.search)) { SearchView().aioDestinations() }
@@ -36,12 +38,23 @@ struct MainTabView: View {
             paths[tab, default: NavigationPath()].append(route)
             player.navigationRequest = nil
         }
+        // Launching or dropping offline: the Library (Downloads) is what still works.
+        .onChange(of: network.isOnline) { _, online in
+            if !online && tab != .library { tab = .library }
+        }
         .tabBarMinimizeBehavior(.onScrollDown)
         .tabViewBottomAccessory(isEnabled: player.hasItem) {
             MiniPlayer()
         }
         .sheet(isPresented: $player.showNowPlaying) {
             NowPlayingView()
+        }
+        .alert("Bookmark", isPresented: Binding(
+            get: { bookmarks.actionError != nil },
+            set: { if !$0 { bookmarks.actionError = nil } })) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(bookmarks.actionError ?? "")
         }
         .alert("Download Failed", isPresented: Binding(
             get: { downloads.lastError != nil },

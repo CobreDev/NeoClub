@@ -59,11 +59,61 @@ struct ListenProgress: Codable, Hashable {
     }
 }
 
+/// An Odyssey character (Whit, Connie, Zoe…), as embedded in episodes and from /character/{id}.
 struct CastMember: Decodable, Hashable, Identifiable {
+    struct Photo: Decodable, Hashable { let small: String?; let medium: String?; let large: String? }
+
+    let characterID: String?
     let name: String?
+    let nickname: String?
+    let job: String?
     let thumbnailSmall: String?
-    var id: String { name ?? UUID().uuidString }
-    enum CodingKeys: String, CodingKey { case name, thumbnailSmall = "thumbnail_small" }
+    let thumbnailMedium: String?
+    let thumbnailLarge: String?
+    let voicedBy: String?
+    let voicedByID: String?
+    let bio: String?
+    let photos: [Photo]?
+    let featuredIn: [Episode]?
+
+    var id: String { characterID ?? name ?? "character" }
+    var avatarURL: URL? { .aio(thumbnailMedium ?? thumbnailSmall ?? thumbnailLarge) }
+    var largeURL: URL? { .aio(thumbnailLarge ?? thumbnailMedium ?? thumbnailSmall) }
+
+    enum CodingKeys: String, CodingKey {
+        case characterID = "id", name, nickname, job, photos
+        case thumbnailSmall = "thumbnail_small", thumbnailMedium = "thumbnail_medium", thumbnailLarge = "thumbnail_large"
+        case voicedBy = "voiced_by", voicedByID = "voiced_by_id", bio = "character_bio", featuredIn = "featured_in"
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        characterID = c.string(.characterID); name = c.string(.name); nickname = c.string(.nickname); job = c.string(.job)
+        thumbnailSmall = c.string(.thumbnailSmall); thumbnailMedium = c.string(.thumbnailMedium); thumbnailLarge = c.string(.thumbnailLarge)
+        voicedBy = c.string(.voicedBy); voicedByID = c.string(.voicedByID); bio = c.string(.bio)
+        photos = try? c.decodeIfPresent([Photo].self, forKey: .photos)
+        featuredIn = try? c.decodeIfPresent([Episode].self, forKey: .featuredIn)
+    }
+
+    static func == (a: CastMember, b: CastMember) -> Bool { a.id == b.id }
+    func hash(into h: inout Hasher) { h.combine(id) }
+}
+
+/// A real person in the cast & crew (actor, writer, director), from episodes and /author/{id}.
+struct Author: Decodable, Hashable, Identifiable {
+    let id: String
+    let name: String?
+    let role: String?
+    let bio: String?
+    let profileImageUrl: String?
+    var imageURL: URL? { .aio(profileImageUrl) }
+
+    enum CodingKeys: String, CodingKey { case id, name, role, bio, profileImageUrl }
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(String.self, forKey: .id)
+        name = c.string(.name); role = c.string(.role); bio = c.string(.bio); profileImageUrl = c.string(.profileImageUrl)
+    }
 }
 
 /// An episode, podcast or video. The same shape appears in lists and in full detail;
@@ -90,7 +140,9 @@ struct Episode: Decodable, Identifiable, Hashable {
     let signedCookie: String?
     let downloadURL: String?
     let characters: [CastMember]?
+    let authors: [Author]?
     let inAlbum: [Episode]?
+    let isBookmarked: Bool?
 
     /// Display title without a leading "#1035: " (the number is shown separately).
     var title: String {
@@ -123,6 +175,7 @@ struct Episode: Decodable, Identifiable, Hashable {
         case airDate = "air_date", mediaLength = "media_length"
         case thumbnailSmall = "thumbnail_small", thumbnailMedium = "thumbnail_medium", thumbnailLarge = "thumbnail_large"
         case streamURL = "stream_url", signedCookie = "signed_cookie", downloadURL = "download_url", inAlbum = "in_album"
+        case authors, isBookmarked = "is_bookmarked"
     }
 
     init(from decoder: Decoder) throws {
@@ -138,6 +191,8 @@ struct Episode: Decodable, Identifiable, Hashable {
         progress = try? c.decodeIfPresent(ListenProgress.self, forKey: .progress)
         streamURL = c.string(.streamURL); signedCookie = c.string(.signedCookie); downloadURL = c.string(.downloadURL)
         characters = try? c.decodeIfPresent([CastMember].self, forKey: .characters)
+        authors = try? c.decodeIfPresent([Author].self, forKey: .authors)
+        isBookmarked = try? c.decodeIfPresent(Bool.self, forKey: .isBookmarked)
         inAlbum = try? c.decodeIfPresent([Episode].self, forKey: .inAlbum)
     }
 
@@ -211,7 +266,7 @@ struct SearchResponse: Decodable {
 }
 
 struct SearchHit: Identifiable, Hashable {
-    enum Kind { case episode, grouping }
+    enum Kind { case episode, grouping, character, author }
     let id: String
     let kind: Kind
     let title: String
@@ -236,4 +291,12 @@ extension KeyedDecodingContainer {
         if let s = try? decodeIfPresent(String.self, forKey: key) { return Int(s) }
         return nil
     }
+}
+
+struct CharactersResponse: Decodable { let characters: [CastMember]? }
+struct AuthorsResponse: Decodable { let authors: [Author]? }
+struct ContentSearchResponse: Decodable {
+    let results: [Episode]?
+    let totalCount: Int?
+    enum CodingKeys: String, CodingKey { case results, totalCount = "total_count" }
 }

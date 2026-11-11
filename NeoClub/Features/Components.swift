@@ -1,3 +1,4 @@
+import SafariServices
 import SwiftUI
 
 /// Navigation destinations shared by every tab.
@@ -5,6 +6,9 @@ enum Route: Hashable {
     case episode(Episode, groupingID: String?)
     case grouping(id: String, preview: Grouping?)
     case groupingList(type: String, title: String, filter: GroupingFilter = .all)
+    case character(id: String, preview: CastMember?)
+    case author(id: String, preview: Author?)
+    case bookmarks
 }
 
 extension View {
@@ -14,6 +18,9 @@ extension View {
             case .episode(let e, let gid): EpisodeView(episode: e, groupingID: gid)
             case .grouping(let id, let preview): GroupingView(groupingID: id, preview: preview)
             case .groupingList(let type, let title, let filter): GroupingGridView(type: type, title: title, filter: filter)
+            case .character(let id, let preview): CharacterView(characterID: id, preview: preview)
+            case .author(let id, let preview): AuthorView(authorID: id, preview: preview)
+            case .bookmarks: BookmarksView()
             }
         }
     }
@@ -67,6 +74,8 @@ struct ProgressIndicator: View {
                 Text("\(max(1, (total - (progress.currentProgress ?? 0)) / 60_000)) min left")
                     .font(.univers(12, relativeTo: .caption))
                     .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.6)
             }
         }
     }
@@ -212,4 +221,20 @@ struct ErrorView: View {
             Button("Try Again") { Task { await retry() } }.buttonStyle(.glassProminent)
         }
     }
+}
+
+struct IdentifiableURL: Identifiable {
+    let url: URL
+    var id: String { url.absoluteString }
+}
+
+/// In-app Safari for club pages that only exist on the website.
+struct SafariView: UIViewControllerRepresentable {
+    let url: URL
+    func makeUIViewController(context: Context) -> SFSafariViewController {
+        let vc = SFSafariViewController(url: url)
+        vc.preferredControlTintColor = UIColor(Color.aioBlue)
+        return vc
+    }
+    func updateUIViewController(_ vc: SFSafariViewController, context: Context) {}
 }

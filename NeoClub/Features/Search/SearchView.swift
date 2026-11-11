@@ -29,12 +29,30 @@ struct SearchView: View {
                     }
                 }
             }
+            let chars = hits.filter { $0.kind == .character }
+            if !chars.isEmpty {
+                Section("Characters") {
+                    ForEach(chars) { hit in
+                        NavigationLink(value: Route.character(id: hit.id, preview: nil)) { HitRow(hit: hit, round: true) }
+                            .aioRow()
+                    }
+                }
+            }
+            let people = hits.filter { $0.kind == .author }
+            if !people.isEmpty {
+                Section("Cast & Crew") {
+                    ForEach(people) { hit in
+                        NavigationLink(value: Route.author(id: hit.id, preview: nil)) { HitRow(hit: hit, round: true) }
+                            .aioRow()
+                    }
+                }
+            }
             if let error { Text(error).foregroundStyle(.secondary) }
         }
         .overlay { if searching && hits.isEmpty { ProgressView() } }
         .aioBackground()
         .navigationTitle("Search")
-        .searchable(text: $query, prompt: "Episodes, albums, characters")
+        .searchable(text: $query, prompt: "Episodes, albums, characters, cast")
         .task(id: query) {
             // iOS smart punctuation turns ' into ’, which the AIO search doesn't match.
             let term = query.trimmingCharacters(in: .whitespaces)
@@ -63,9 +81,10 @@ struct SearchView: View {
 
 private struct HitRow: View {
     let hit: SearchHit
+    var round = false
     var body: some View {
         HStack(spacing: 12) {
-            Artwork(url: hit.imageURL, cornerRadius: 6).frame(width: 52, height: 52)
+            Artwork(url: hit.imageURL, cornerRadius: round ? 26 : 6).frame(width: 52, height: 52)
             VStack(alignment: .leading, spacing: 2) {
                 Text(hit.title).font(.universBold(16, relativeTo: .headline)).lineLimit(2)
                 Text(hit.detail).font(.univers(13, relativeTo: .subheadline)).foregroundStyle(.secondary)

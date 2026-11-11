@@ -31,6 +31,8 @@ struct NeoClubApp: App {
                 .environment(app)
                 .environment(player)
                 .environment(downloads)
+                .environment(BookmarkStore.shared)
+                .environment(NetworkMonitor.shared)
                 .tint(.aioTint)
                 // Always the branded blue look (like the AIO website), with white text on it.
                 .preferredColorScheme(.dark)
@@ -85,6 +87,7 @@ final class AppModel {
         if let pin { Keychain.set(Data(pin.utf8), for: Self.pinKey(profile.viewerID)) }
         UserDefaults.standard.set(profile.viewerID, forKey: Self.profileKey)
         self.profile = profile
+        BookmarkStore.shared.reset()
         phase = .ready
     }
 
@@ -101,6 +104,7 @@ final class AppModel {
         for p in profiles { Keychain.set(nil, for: Self.pinKey(p.viewerID)) }
         UserDefaults.standard.removeObject(forKey: Self.profileKey)
         profile = nil
+        BookmarkStore.shared.reset()
         phase = .signedOut
     }
 

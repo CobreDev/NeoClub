@@ -61,3 +61,24 @@ Headers on every call: `Authorization: Bearer …`, `X-Experience-Name: Adventur
 - Media hosts: `media.adventuresinodyssey.com` (private, signed), images on `d23sy43gbewnpt.cloudfront.net` (public).
 
 **Gotcha (2026-11-11):** `GET /content/{id}` only includes `progress` when `player=true`. With `player=false` the field is absent even when the profile has real progress. Always read progress with `player=true`. Also, `album_name` comes back as the literal `"Episode"` when `content_grouping_id` is passed.
+
+## Bookmarks, characters, cast (v1 additions)
+
+- Bookmarks: `GET /content/search?community=Adventures in Odyssey&is_bookmarked=true&pagenum&pagecount` → `{results,total_count}`;
+  add `POST /bookmark {subject_id, bookmark_type:"Bookmark", subject_type:"Content__c"}`;
+  remove `DELETE /bookmark?subject_type=Content__c&subject_id=…&bookmark_type=Bookmark`.
+- Characters: `GET /character/{id}` → `{characters:[…]}` (bio is `character_bio`, `featured_in` episodes, `voiced_by_id` → author).
+- Cast & crew: `GET /author/{id}` → `{authors:[…]}`; episode detail includes `authors` with `role` (same person may appear twice with different roles).
+- Search objects `Character__c [Name, Thumbnail_Small__c]` and `Author__c [Name, Profile_Image_URL__c]`.
+
+## Downloads
+
+The episode `download_url` and HLS segments return 401 to anything except the official client's exact request shape.
+Making downloads work would mean disguising NeoClub's requests as the official app's, which we don't do. The download UI is kept so it
+works if the server starts accepting the requests.
+
+## Font licensing
+
+Jacoby ICG Black and Univers are commercial fonts copied from the official app's bundle for this personal, locally signed build.
+They're not licensed for redistribution: don't ship NeoClub publicly (App Store/TestFlight/GitHub releases) with these files
+without buying licenses or swapping in licensed alternatives.

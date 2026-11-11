@@ -3,6 +3,7 @@ import SwiftUI
 struct HomeView: View {
     @Environment(AppModel.self) private var app
     @Environment(AudioPlayer.self) private var player
+    @Environment(BookmarkStore.self) private var bookmarks
     @State private var home: HomeResponse?
     @State private var error: String?
     @State private var showAccount = false
@@ -10,13 +11,17 @@ struct HomeView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 30) {
+                OfflineBanner()
                 if let carousel = home?.carousel, !carousel.isEmpty {
                     CarouselView(items: carousel)
                 }
                 if let shelves = home?.playlists {
-                    ForEach(shelves) { shelf in
+                    ForEach(Array(shelves.enumerated()), id: \.element.id) { i, shelf in
                         Shelf(shelf: shelf)
+                        // Bookmarks sit right after "Continue Listening" (or first if there isn't one).
+                        if i == 0 { BookmarksShelf() }
                     }
+                    if shelves.isEmpty { BookmarksShelf() }
                 } else if let error {
                     ErrorView(message: error) { await load() }
                 } else {
@@ -48,13 +53,16 @@ struct HomeView: View {
     }
 
     private func load() async {
+        async let marks: Void = bookmarks.load()
         do {
             home = try await AIOService.home()
             error = nil
         } catch {
             self.error = error.localizedDescription
         }
+        await marks
     }
+
 }
 
 /// A horizontal shelf of episodes, titled by its album/collection, linking to the full grouping.
@@ -69,7 +77,8 @@ private struct Shelf: View {
                     HStack(spacing: 4) {
                         Text(displayTitle)
                             .font(.universBold(22, relativeTo: .title2))
-                            .lineLimit(1)
+                            .lineLimit(2)
+                            .multilineTextAlignment(.leading)
                         Image(systemName: "chevron.right").font(.headline).foregroundStyle(.secondary)
                         Spacer(minLength: 0)
                     }
@@ -115,6 +124,7 @@ private struct Shelf: View {
 /// Large featured cards, like Apple Music's top-of-Home banners.
 private struct CarouselView: View {
     let items: [CarouselItem]
+    @State private var webPage: IdentifiableURL?
 
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
@@ -132,6 +142,9 @@ private struct CarouselView: View {
 
                     if let route = CarouselView.route(for: item.hyperlink) {
                         NavigationLink(value: route) { card }.buttonStyle(.plain)
+                    } else if let url = CarouselView.webURL(for: item.hyperlink) {
+                        // Badges, contests and other club pages that only exist on the website.
+                        Button { webPage = IdentifiableURL(url: url) } label: { card }.buttonStyle(.plain)
                     } else {
                         card
                     }
@@ -141,6 +154,13 @@ private struct CarouselView: View {
             .padding(.horizontal, 20)
         }
         .scrollTargetBehavior(.viewAligned)
+        .sheet(item: $webPage) { SafariView(url: $0.url).ignoresSafeArea() }
+    }
+
+    static func webURL(for link: String?) -> URL? {
+        guard let link, !link.isEmpty else { return nil }
+        if link.hasPrefix("http") { return URL(string: link) }
+        return URL(string: "https://app.adventuresinodyssey.com" + (link.hasPrefix("/") ? link : "/" + link))
     }
 
     /// Maps AIO web routes (/contentGroup/{id}, /content/{id}, /contentGroup/{g}/content/{c}) to app routes.
@@ -161,5 +181,39 @@ private struct CarouselView: View {
     private static func placeholder(_ id: String) -> Episode {
         // Minimal stub; EpisodeView fetches the full detail.
         try! JSONDecoder().decode(Episode.self, from: Data(#"{"id":"\#(id)"}"#.utf8))
+    }
+}
+
+/// Horizontal shelf of the profile's bookmarked episodes, linking to the full Bookmarks page.
+private struct BookmarksShelf: View {
+    @Environment(BookmarkStore.self) private var bookmarks
+
+    var body: some View {
+        if !bookmarks.items.isEmpty {
+            VStack(alignment: .leading, spacing: 12) {
+                NavigationLink(value: Route.bookmarks) {
+                    HStack(spacing: 4) {
+                        Text("Bookmarks").font(.universBold(22, relativeTo: .title2))
+                        Image(systemName: "chevron.right").font(.headline).foregroundStyle(.secondary)
+                        Spacer(minLength: 0)
+                    }
+                    .padding(.horizontal, 20)
+                }
+                .buttonStyle(.plain)
+                ScrollView(.horizontal, showsIndicators: false) {
+                    LazyHStack(alignment: .top, spacing: 14) {
+                        ForEach(bookmarks.items) { episode in
+                            NavigationLink(value: Route.episode(episode, groupingID: nil)) {
+                                EpisodeCard(episode: episode, width: 150)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                    .scrollTargetLayout()
+                    .padding(.horizontal, 20)
+                }
+                .scrollTargetBehavior(.viewAligned)
+            }
+        }
     }
 }

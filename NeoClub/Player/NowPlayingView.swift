@@ -299,6 +299,7 @@ private struct SleepTimerButton: View {
 private struct EpisodeMenu: View {
     @Environment(AudioPlayer.self) private var player
     @Environment(DownloadStore.self) private var downloads
+    @Environment(BookmarkStore.self) private var bookmarks
 
     var body: some View {
         Menu {
@@ -316,6 +317,11 @@ private struct EpisodeMenu: View {
                     player.navigationRequest = .episode(e, groupingID: player.groupingID)
                 }
                 Divider()
+                if bookmarks.isBookmarked(e) {
+                    Button("Remove Bookmark", systemImage: "bookmark.slash") { bookmarks.toggle(e) }
+                } else {
+                    Button("Bookmark", systemImage: "bookmark") { bookmarks.toggle(e) }
+                }
                 if downloads.isDownloaded(e.id) {
                     Button("Remove Download", systemImage: "trash", role: .destructive) { downloads.delete(e.id) }
                 } else if downloads.active[e.id] != nil {

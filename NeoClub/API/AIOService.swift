@@ -61,13 +61,21 @@ enum AIOService {
         let request = SearchRequest(searchTerm: term, searchObjects: [
             .init(objectName: "Content__c", fields: ["Name", "Thumbnail_Small__c", "Subtype__c", "Episode_Number__c"], pageNumber: 1, pageSize: 25),
             .init(objectName: "Content_Grouping__c", fields: ["Name", "Image_URL__c", "Type__c"], pageNumber: 1, pageSize: 10),
+            .init(objectName: "Character__c", fields: ["Name", "Thumbnail_Small__c"], pageNumber: 1, pageSize: 10),
+            .init(objectName: "Author__c", fields: ["Name", "Profile_Image_URL__c"], pageNumber: 1, pageSize: 10),
         ])
         let response: SearchResponse = try await api.post("/search", body: request)
         var hits: [SearchHit] = []
         for object in response.resultObjects ?? [] {
             let isGrouping = object.objectName == "Content_Grouping__c"
             for row in object.results ?? [] {
-                if isGrouping {
+                if object.objectName == "Character__c" {
+                    hits.append(SearchHit(id: row.id, kind: .character, title: row.value("Name") ?? "Character",
+                                          detail: "Character", imageURL: .aio(row.value("Thumbnail_Small__c"))))
+                } else if object.objectName == "Author__c" {
+                    hits.append(SearchHit(id: row.id, kind: .author, title: row.value("Name") ?? "Cast",
+                                          detail: "Cast & Crew", imageURL: .aio(row.value("Profile_Image_URL__c"))))
+                } else if isGrouping {
                     hits.append(SearchHit(id: row.id, kind: .grouping, title: row.value("Name") ?? "Untitled",
                                           detail: row.value("Type__c") ?? "Collection",
                                           imageURL: .aio(row.value("Image_URL__c"))))
@@ -80,6 +88,41 @@ enum AIOService {
             }
         }
         return hits
+    }
+
+    // MARK: Characters & cast
+
+    static func character(_ id: String) async throws -> CastMember? {
+        try await api.get("/character/\(id)", as: CharactersResponse.self).characters?.first
+    }
+
+    static func author(_ id: String) async throws -> Author? {
+        try await api.get("/author/\(id)", as: AuthorsResponse.self).authors?.first
+    }
+
+    // MARK: Bookmarks (like the official app: GET /content/search?is_bookmarked, POST/DELETE /bookmark)
+
+    static func bookmarks(page: Int = 1) async throws -> [Episode] {
+        try await api.get("/content/search", query: [
+            "community": "Adventures in Odyssey", "is_bookmarked": "true",
+            "pagenum": String(page), "pagecount": "50",
+        ], as: ContentSearchResponse.self).results ?? []
+    }
+
+    private struct BookmarkRequest: Encodable {
+        let subject_id: String
+        let bookmark_type = "Bookmark"
+        let subject_type = "Content__c"
+    }
+
+    static func addBookmark(_ contentID: String) async throws {
+        _ = try await api.raw("POST", "/bookmark", body: try JSONEncoder().encode(BookmarkRequest(subject_id: contentID)))
+    }
+
+    static func removeBookmark(_ contentID: String) async throws {
+        _ = try await api.raw("DELETE", "/bookmark", query: [
+            "subject_type": "Content__c", "subject_id": contentID, "bookmark_type": "Bookmark",
+        ])
     }
 
     private struct ProgressUpdate: Encodable {
