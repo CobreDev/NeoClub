@@ -18,6 +18,7 @@ struct LibraryView: View {
                         Spacer()
                         Button("Switch") { app.switchProfile() }.buttonStyle(.bordered)
                     }
+                    .aioRow()
                 }
             }
             Section {
@@ -30,22 +31,25 @@ struct LibraryView: View {
                         }
                     } icon: { Image(systemName: "arrow.down.circle.fill") }
                 }
+                .aioRow()
             }
             Section {
                 Toggle("Sync Listening Progress", isOn: $syncProgress)
                     .onChange(of: syncProgress) { _, on in ProgressSync.isEnabled = on }
+                    .aioRow()
             } footer: {
                 Text("Saves where you stop listening to your Adventures in Odyssey Club account, like the official app.")
             }
             #if DEBUG
             Section("Developer") {
-                NavigationLink("API Explorer") { APIExplorerView() }
+                NavigationLink("API Explorer") { APIExplorerView() }.aioRow()
             }
             #endif
             Section {
-                Button("Sign Out", role: .destructive) { Task { await app.signOut() } }
+                Button("Sign Out", role: .destructive) { Task { await app.signOut() } }.aioRow()
             }
         }
+        .aioBackground("bg_treasure.jpg")
         .navigationTitle("Library")
     }
 }
@@ -70,6 +74,7 @@ struct DownloadsView: View {
                     }
                 }
                 .buttonStyle(.plain)
+                .aioRow()
             }
             .onDelete { idx in idx.map { downloads.items[$0].id }.forEach(downloads.delete) }
         }
@@ -79,6 +84,7 @@ struct DownloadsView: View {
                                        description: Text("Download episodes to listen without a connection."))
             }
         }
+        .aioBackground()
         .navigationTitle("Downloads")
         .toolbar {
             if !downloads.items.isEmpty {

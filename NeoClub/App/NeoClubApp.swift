@@ -7,13 +7,22 @@ struct NeoClubApp: App {
     @State private var downloads = DownloadStore.shared
 
     init() {
-        // Large navigation titles in the official AIO display face (Jacoby), like the club app's headers.
+        // Transparent nav bars over the branded backdrop, with titles in the official AIO faces
+        // (Jacoby for large titles, Univers for inline). Set via UINavigationBarAppearance so it
+        // survives SwiftUI's toolbar configuration.
+        let bar = UINavigationBarAppearance()
+        bar.configureWithTransparentBackground()
         if let jacoby = UIFont(name: "JacobyICGBlack", size: 34) {
-            UINavigationBar.appearance().largeTitleTextAttributes = [.font: UIFontMetrics(forTextStyle: .largeTitle).scaledFont(for: jacoby)]
+            bar.largeTitleTextAttributes = [.font: UIFontMetrics(forTextStyle: .largeTitle).scaledFont(for: jacoby),
+                                            .foregroundColor: UIColor.white]
         }
         if let univers = UIFont(name: "Univers-Bold", size: 17) {
-            UINavigationBar.appearance().titleTextAttributes = [.font: UIFontMetrics(forTextStyle: .headline).scaledFont(for: univers)]
+            bar.titleTextAttributes = [.font: UIFontMetrics(forTextStyle: .headline).scaledFont(for: univers),
+                                       .foregroundColor: UIColor.white]
         }
+        UINavigationBar.appearance().standardAppearance = bar
+        UINavigationBar.appearance().scrollEdgeAppearance = bar
+        UINavigationBar.appearance().compactAppearance = bar
     }
 
     var body: some Scene {
@@ -23,6 +32,8 @@ struct NeoClubApp: App {
                 .environment(player)
                 .environment(downloads)
                 .tint(.aioTint)
+                // Always the branded blue look (like the AIO website), with white text on it.
+                .preferredColorScheme(.dark)
                 .task { await app.bootstrap() }
         }
     }

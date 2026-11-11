@@ -24,6 +24,7 @@ struct HomeView: View {
             }
             .padding(.bottom, 24)
         }
+        .aioBackground("bg_town.jpg")
         .navigationTitle("Home")
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {

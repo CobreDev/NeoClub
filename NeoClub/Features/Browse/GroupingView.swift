@@ -18,6 +18,7 @@ struct GroupingView: View {
             header
                 .listRowInsets(EdgeInsets())
                 .listRowSeparator(.hidden)
+                .listRowBackground(Color.clear)
             if grouping == nil && error == nil && episodes.isEmpty {
                 LoadingView().listRowSeparator(.hidden)
             }
@@ -28,9 +29,11 @@ struct GroupingView: View {
                 NavigationLink(value: Route.episode(episode, groupingID: groupingID)) {
                     EpisodeRow(episode: episode) { play(episode) }
                 }
+                .listRowBackground(Color.clear)
             }
         }
         .listStyle(.plain)
+        .aioBackground(artworkURL: shown?.artworkURL)
         .navigationTitle(shown?.title ?? "")
         .navigationBarTitleDisplayMode(.inline)
         .refreshable { await load() }
@@ -59,7 +62,7 @@ struct GroupingView: View {
                         .frame(maxWidth: 280)
                         .padding(.vertical, 4)
                 }
-                .buttonStyle(.glassProminent)
+                .aioPrimaryButton()
             }
             if let text = shown?.fullDescription ?? shown?.description, !text.isEmpty {
                 Text(text)

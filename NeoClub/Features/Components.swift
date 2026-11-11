@@ -56,14 +56,14 @@ struct ProgressIndicator: View {
         if let progress, progress.isComplete {
             Label("Played", systemImage: "checkmark.circle.fill")
                 .labelStyle(.iconOnly)
-                .foregroundStyle(Color.aioTint)
+                .foregroundStyle(Color.aioYellow)
                 .font(.caption)
         } else if let progress, progress.isInProgress, let total = durationMs, total > 0 {
             let fraction = min(1, Double(progress.currentProgress ?? 0) / Double(total))
             HStack(spacing: 6) {
-                Capsule().fill(.quaternary)
+                Capsule().fill(.white.opacity(0.25))
                     .overlay(alignment: .leading) {
-                        GeometryReader { g in Capsule().fill(Color.aioTint).frame(width: g.size.width * fraction) }
+                        GeometryReader { g in Capsule().fill(Color.aioYellow).frame(width: g.size.width * fraction) }
                     }
                     .frame(width: 44, height: 4)
                 Text("\(max(1, (total - (progress.currentProgress ?? 0)) / 60_000)) min left")

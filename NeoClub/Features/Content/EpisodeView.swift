@@ -86,6 +86,7 @@ struct EpisodeView: View {
             .frame(maxWidth: 720)
             .frame(maxWidth: .infinity)
         }
+        .aioBackground(artworkURL: shown.artworkURL)
         .navigationBarTitleDisplayMode(.inline)
         .task { await load() }
     }
@@ -101,7 +102,7 @@ struct EpisodeView: View {
                     .frame(minWidth: 140)
                     .padding(.vertical, 4)
             }
-            .buttonStyle(.glassProminent)
+            .aioPrimaryButton()
 
             downloadButton
             }

@@ -37,6 +37,7 @@ struct BrowseView: View {
             }
             .padding(20)
         }
+        .aioBackground("bg_celebration.jpg")
         .navigationTitle("Browse")
     }
 }
@@ -72,6 +73,7 @@ struct GroupingGridView: View {
             if loading { LoadingView() }
             if let error, groupings.isEmpty { ErrorView(message: error) { await loadMore() } }
         }
+        .aioBackground("bg_town.jpg")
         .navigationTitle(title)
         .task { if groupings.isEmpty { await loadMore() } }
     }

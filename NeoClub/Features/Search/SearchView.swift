@@ -16,6 +16,7 @@ struct SearchView: View {
                 Section("Albums & Collections") {
                     ForEach(groups) { hit in
                         NavigationLink(value: Route.grouping(id: hit.id, preview: nil)) { HitRow(hit: hit) }
+                            .aioRow()
                     }
                 }
             }
@@ -24,12 +25,14 @@ struct SearchView: View {
                 Section("Episodes") {
                     ForEach(eps) { hit in
                         NavigationLink(value: Route.episode(Self.stub(hit), groupingID: nil)) { HitRow(hit: hit) }
+                            .aioRow()
                     }
                 }
             }
             if let error { Text(error).foregroundStyle(.secondary) }
         }
         .overlay { if searching && hits.isEmpty { ProgressView() } }
+        .aioBackground()
         .navigationTitle("Search")
         .searchable(text: $query, prompt: "Episodes, albums, characters")
         .task(id: query) {

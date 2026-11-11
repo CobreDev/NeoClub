@@ -117,9 +117,20 @@ extension DownloadStore: URLSessionDownloadDelegate {
     nonisolated func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didFinishDownloadingTo location: URL) {
         // The temp file is deleted when this returns, so move it synchronously first.
         let keep = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
-        try? FileManager.default.moveItem(at: location, to: keep)
+        let moved = (try? FileManager.default.moveItem(at: location, to: keep)) != nil
+        let status = (downloadTask.response as? HTTPURLResponse)?.statusCode ?? 0
+        let size = (try? FileManager.default.attributesOfItem(atPath: keep.path)[.size] as? Int64) ?? 0
         let id = downloadTask.taskIdentifier
-        MainActor.assumeIsolated { finish(task: id, at: keep) }
+        SignInLog.write("download finished: HTTP \(status), \(size) bytes, moved=\(moved)")
+        MainActor.assumeIsolated {
+            guard moved, status == 200, size > 0 else {
+                try? FileManager.default.removeItem(at: keep)
+                if let entry = pending.removeValue(forKey: id) { active[entry.episode.id] = nil }
+                lastError = "Download failed (HTTP \(status))."
+                return
+            }
+            finish(task: id, at: keep)
+        }
     }
 
     nonisolated func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didWriteData _: Int64,

@@ -70,6 +70,68 @@ struct BrandImage: View {
     }
 }
 
+/// Colorful page backdrop in the style of the AIO website: brand-blue gradient, honeycomb texture,
+/// and either official section art or blurred cover art fading in from the top.
+struct AIOBackground: View {
+    var art: String?
+    var artworkURL: URL?
+
+    var body: some View {
+        ZStack(alignment: .top) {
+            LinearGradient(colors: [Color(hex: 0x2F7BC0), .aioOcean, .aioNavy], startPoint: .top, endPoint: .bottom)
+            if let honeycomb = UIImage(named: "honeycomb") {
+                Image(uiImage: honeycomb)
+                    .resizable(resizingMode: .tile)
+                    .opacity(0.04)
+                    .blendMode(.screen)
+            }
+            header
+        }
+        .ignoresSafeArea()
+    }
+
+    @ViewBuilder private var header: some View {
+        // Fixed-size containers so the scaled-to-fill art can never affect layout.
+        if let artworkURL {
+            Color.clear
+                .frame(height: 520)
+                .overlay {
+                    AsyncImage(url: artworkURL) { $0.resizable().scaledToFill() } placeholder: { Color.clear }
+                        .blur(radius: 50)
+                        .opacity(0.75)
+                }
+                .clipped()
+                .mask(LinearGradient(colors: [.black, .black.opacity(0.6), .clear], startPoint: .top, endPoint: .bottom))
+        } else if let art {
+            Color.clear
+                .frame(height: 360)
+                .overlay { BrandImage(name: art).scaledToFill() }
+                .clipped()
+                .mask(LinearGradient(colors: [.black.opacity(0.95), .black.opacity(0.55), .clear], startPoint: .top, endPoint: .bottom))
+        }
+    }
+}
+
+extension View {
+    /// Applies the branded backdrop behind a screen (works for ScrollView and List).
+    func aioBackground(_ art: String? = nil, artworkURL: URL? = nil) -> some View {
+        scrollContentBackground(.hidden)
+            .background { AIOBackground(art: art, artworkURL: artworkURL) }
+    }
+
+    /// Translucent row background so lists sit nicely on the colorful backdrop.
+    func aioRow() -> some View {
+        listRowBackground(Rectangle().fill(.white.opacity(0.08)))
+    }
+
+    /// Primary call-to-action in AIO yellow (like the website's nav bar) with navy text.
+    func aioPrimaryButton() -> some View {
+        buttonStyle(.glassProminent)
+            .tint(.aioYellow)
+            .foregroundStyle(Color.aioNavy)
+    }
+}
+
 extension URL {
     /// Builds a URL from API strings, which sometimes contain unescaped spaces.
     static func aio(_ string: String?) -> URL? {

@@ -3,6 +3,7 @@ import SwiftUI
 /// Apple Music-style shell: Liquid Glass tab bar with the mini player docked as its bottom accessory.
 struct MainTabView: View {
     @Environment(AudioPlayer.self) private var player
+    @Environment(DownloadStore.self) private var downloads
 
     var body: some View {
         @Bindable var player = player
@@ -26,6 +27,13 @@ struct MainTabView: View {
         }
         .sheet(isPresented: $player.showNowPlaying) {
             NowPlayingView()
+        }
+        .alert("Download Failed", isPresented: Binding(
+            get: { downloads.lastError != nil },
+            set: { if !$0 { downloads.lastError = nil } })) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(downloads.lastError ?? "")
         }
     }
 }
