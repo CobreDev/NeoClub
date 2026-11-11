@@ -24,6 +24,29 @@ final class AudioPlayer {
     /// Set to ask the tab shell to dismiss Now Playing and navigate somewhere.
     var navigationRequest: Route?
 
+    // MARK: Sleep timer (like Apple Podcasts)
+    enum SleepTimer: Hashable { case off, minutes(Int), endOfEpisode }
+    private(set) var sleepTimer: SleepTimer = .off
+    private(set) var sleepEndsAt: Date?
+    private var sleepTask: Task<Void, Never>?
+
+    func setSleepTimer(_ timer: SleepTimer) {
+        sleepTask?.cancel()
+        sleepTimer = timer
+        sleepEndsAt = nil
+        if case .minutes(let m) = timer {
+            let end = Date().addingTimeInterval(TimeInterval(m * 60))
+            sleepEndsAt = end
+            sleepTask = Task { [weak self] in
+                try? await Task.sleep(for: .seconds(Double(m * 60)))
+                guard !Task.isCancelled, let self else { return }
+                self.pause()
+                self.sleepTimer = .off
+                self.sleepEndsAt = nil
+            }
+        }
+    }
+
     struct HistoryEntry: Codable, Identifiable, Hashable {
         let id: String
         let title: String
@@ -239,7 +262,10 @@ final class AudioPlayer {
         position = duration
         sync.report(positionMs: Int(duration * 1000), finished: true) { [weak self] p in self?.progressOverrides[episode.id] = p }
         isPlaying = false
-        if !queue.isEmpty { playNext() } else { updateNowPlaying() }
+        if sleepTimer == .endOfEpisode {
+            sleepTimer = .off
+            updateNowPlaying()
+        } else if !queue.isEmpty { playNext() } else { updateNowPlaying() }
     }
 
     private func reportProgress() {
