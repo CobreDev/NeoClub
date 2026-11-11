@@ -10,6 +10,8 @@ import SwiftUI
 /// - Half-folded upright (laptop): artwork or Up Next on the top half, title and controls on the bottom half.
 struct NowPlayingView: View {
     @Environment(AudioPlayer.self) private var player
+    /// The card host draws the backdrop itself (full-bleed), so the player can be inset to the safe area.
+    var drawsBackground = true
     @State private var mode: Mode = .artwork
     @State private var halfFolded = false
 
@@ -31,7 +33,7 @@ struct NowPlayingView: View {
             .frame(width: size.width, height: size.height)
         }
         .foregroundStyle(.white)
-        .background { background }
+        .background { if drawsBackground { NowPlayingBackdrop() } }
         .animation(.spring(response: 0.42, dampingFraction: 0.86), value: mode)
         .animation(.spring(response: 0.45, dampingFraction: 0.9), value: halfFolded)
         .readsHinge($halfFolded)
@@ -166,18 +168,6 @@ struct NowPlayingView: View {
 
     // MARK: Pieces
 
-    private var background: some View {
-        Color.aioNavy
-            .overlay {
-                AsyncImage(url: player.episode?.artworkURL) { $0.resizable().scaledToFill() } placeholder: { Color.clear }
-                    .blur(radius: 80)
-                    .saturation(1.3)
-                    .opacity(0.7)
-            }
-            .overlay(LinearGradient(colors: [.black.opacity(0.1), .black.opacity(0.45)], startPoint: .top, endPoint: .bottom))
-            .clipped()
-            .ignoresSafeArea()
-    }
 
     /// Title over album (Apple: ~20pt semibold over ~20pt secondary), ⋯ on the right.
     private var titleRow: some View {
@@ -610,5 +600,23 @@ private extension View {
         } else {
             self
         }
+    }
+}
+
+/// Blurred cover art over the brand navy, behind the Now Playing card.
+struct NowPlayingBackdrop: View {
+    @Environment(AudioPlayer.self) private var player
+
+    var body: some View {
+        Color.aioNavy
+            .overlay {
+                AsyncImage(url: player.episode?.artworkURL) { $0.resizable().scaledToFill() } placeholder: { Color.clear }
+                    .blur(radius: 80)
+                    .saturation(1.3)
+                    .opacity(0.7)
+            }
+            .overlay(LinearGradient(colors: [.black.opacity(0.1), .black.opacity(0.45)], startPoint: .top, endPoint: .bottom))
+            .clipped()
+            .ignoresSafeArea()
     }
 }

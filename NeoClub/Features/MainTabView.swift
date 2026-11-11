@@ -10,8 +10,6 @@ struct MainTabView: View {
     @Environment(BookmarkStore.self) private var bookmarks
     @State private var tab: TabID = NetworkMonitor.shared.isOnline ? .home : .library
     @State private var paths: [TabID: NavigationPath] = [:]
-    /// Lets Now Playing zoom out of the mini player and back into it, like Apple Music.
-    @Namespace private var playerTransition
 
     private func path(_ id: TabID) -> Binding<NavigationPath> {
         Binding(get: { paths[id] ?? NavigationPath() }, set: { paths[id] = $0 })
@@ -19,6 +17,8 @@ struct MainTabView: View {
 
     var body: some View {
         tabs
+            // Now Playing card (Apple Music-style slide-then-collapse into the mini player).
+            .overlay { PlayerCardHost() }
         #if DEBUG
         // Developer convenience: `-debugResumeLast` resumes the most recent episode on launch (progress sync is off in debug).
         .task {
@@ -62,13 +62,6 @@ struct MainTabView: View {
         .tabBarMinimizeBehavior(.onScrollDown)
         .tabViewBottomAccessory(isEnabled: player.hasItem) {
             MiniPlayer()
-                .matchedTransitionSource(id: "nowPlaying", in: playerTransition)
-        }
-        // Full-screen like Apple Music: zooms out of the mini player and swipes down back into it
-        // (the zoom transition provides the interactive dismiss).
-        .fullScreenCover(isPresented: $player.showNowPlaying) {
-            NowPlayingView()
-                .navigationTransition(.zoom(sourceID: "nowPlaying", in: playerTransition))
         }
         .alert("Bookmark", isPresented: Binding(
             get: { bookmarks.actionError != nil },
@@ -90,6 +83,9 @@ struct MainTabView: View {
 /// Compact player shown in the tab bar accessory; tap to open Now Playing.
 struct MiniPlayer: View {
     @Environment(AudioPlayer.self) private var player
+    /// The copy drawn on the Now Playing card as it lands; the real one measures itself and hides meanwhile.
+    var isCardFace = false
+    @State private var card = PlayerCardModel.shared
     @Environment(\.tabViewBottomAccessoryPlacement) private var placement
 
     var body: some View {
@@ -122,5 +118,18 @@ struct MiniPlayer: View {
         .padding(.horizontal, 14)
         .contentShape(.rect)
         .onTapGesture { player.showNowPlaying = true }
+        // A quick upward flick opens Now Playing (like Apple Music, the card isn't dragged up with the finger;
+        // it plays the same open animation as a tap).
+        .gesture(isCardFace ? nil : DragGesture(minimumDistance: 10, coordinateSpace: .global)
+            .onEnded { v in
+                let up = -v.translation.height
+                let speed = -v.velocity.height
+                if up > 24 && (speed > 250 || up > 60) { player.showNowPlaying = true }
+            })
+        .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { frame in
+            if !isCardFace { card.miniFrame = frame }
+        }
+        // The card stands in for the mini player while it's open or animating.
+        .opacity(!isCardFace && card.visible ? 0 : 1)
     }
 }
