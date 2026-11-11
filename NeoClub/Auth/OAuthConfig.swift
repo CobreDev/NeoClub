@@ -12,15 +12,16 @@ enum OAuthConfig {
     static let apiBaseURL = URL(string: "https://fotf.my.site.com/aio/services/apexrest/v1")!
 }
 
+/// Mirrors the official app's authorize request (S256 challenge, padded base64url like Dart's `base64Url`).
 struct PKCE {
     let verifier: String
     let challenge: String
+    let state: String
 
     init() {
-        var bytes = [UInt8](repeating: 0, count: 64)
-        _ = SecRandomCopyBytes(kSecRandomDefault, bytes.count, &bytes)
-        verifier = Data(bytes).base64URLEncoded()
-        challenge = Data(SHA256.hash(data: Data(verifier.utf8))).base64URLEncoded()
+        verifier = Self.random(64).base64URLEncoded(padded: false)
+        challenge = Data(SHA256.hash(data: Data(verifier.utf8))).base64URLEncoded(padded: true)
+        state = Self.random(16).base64URLEncoded(padded: false)
     }
 
     func authorizeURL() -> URL {
@@ -29,18 +30,37 @@ struct PKCE {
             .init(name: "response_type", value: "code"),
             .init(name: "client_id", value: OAuthConfig.clientID),
             .init(name: "redirect_uri", value: OAuthConfig.redirectURI),
-            .init(name: "code_challenge", value: challenge),
             .init(name: "scope", value: OAuthConfig.scope),
+            .init(name: "state", value: state),
+            .init(name: "code_challenge", value: challenge),
+            .init(name: "code_challenge_method", value: "S256"),
         ]
         return c.url!
+    }
+
+    private static func random(_ count: Int) -> Data {
+        var bytes = [UInt8](repeating: 0, count: count)
+        _ = SecRandomCopyBytes(kSecRandomDefault, count, &bytes)
+        return Data(bytes)
     }
 }
 
 extension Data {
-    func base64URLEncoded() -> String {
-        base64EncodedString()
+    func base64URLEncoded(padded: Bool) -> String {
+        let s = base64EncodedString()
             .replacingOccurrences(of: "+", with: "-")
             .replacingOccurrences(of: "/", with: "_")
-            .replacingOccurrences(of: "=", with: "")
+        return padded ? s : s.replacingOccurrences(of: "=", with: "")
     }
+}
+
+/// Strict application/x-www-form-urlencoded encoding (URLComponents leaves "=", "&" and "+" alone).
+func formEncode(_ fields: [String: String]) -> Data {
+    var allowed = CharacterSet.alphanumerics
+    allowed.insert(charactersIn: "-._*")
+    return fields.map { k, v in
+        "\(k.addingPercentEncoding(withAllowedCharacters: allowed)!)=\(v.addingPercentEncoding(withAllowedCharacters: allowed)!)"
+    }
+    .joined(separator: "&")
+    .data(using: .utf8)!
 }

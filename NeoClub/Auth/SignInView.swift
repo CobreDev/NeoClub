@@ -43,7 +43,7 @@ struct SignInView: View {
         .frame(maxWidth: 480)
         .sheet(isPresented: $showingWeb) {
             NavigationStack {
-                OAuthWebView(url: pkce.authorizeURL()) { code in
+                OAuthWebView(url: pkce.authorizeURL(), expectedState: pkce.state) { code in
                     showingWeb = false
                     Task { await finish(code: code) }
                 }
@@ -73,9 +73,10 @@ struct SignInView: View {
 
 struct OAuthWebView: UIViewRepresentable {
     let url: URL
+    let expectedState: String
     let onCode: (String) -> Void
 
-    func makeCoordinator() -> Coordinator { Coordinator(onCode: onCode) }
+    func makeCoordinator() -> Coordinator { Coordinator(expectedState: expectedState, onCode: onCode) }
 
     func makeUIView(context: Context) -> WKWebView {
         let web = WKWebView(frame: .zero, configuration: WKWebViewConfiguration())
@@ -87,9 +88,13 @@ struct OAuthWebView: UIViewRepresentable {
     func updateUIView(_ uiView: WKWebView, context: Context) {}
 
     final class Coordinator: NSObject, WKNavigationDelegate {
+        let expectedState: String
         let onCode: (String) -> Void
         private var handled = false
-        init(onCode: @escaping (String) -> Void) { self.onCode = onCode }
+        init(expectedState: String, onCode: @escaping (String) -> Void) {
+            self.expectedState = expectedState
+            self.onCode = onCode
+        }
 
         func webView(_ webView: WKWebView, decidePolicyFor action: WKNavigationAction,
                      decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
@@ -99,9 +104,10 @@ struct OAuthWebView: UIViewRepresentable {
                 return
             }
             decisionHandler(.cancel)
-            let code = URLComponents(url: url, resolvingAgainstBaseURL: false)?
-                .queryItems?.first { $0.name == "code" }?.value
-            if let code, !handled {
+            let items = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? []
+            let code = items.first { $0.name == "code" }?.value
+            let state = items.first { $0.name == "state" }?.value
+            if let code, state == expectedState, !handled {
                 handled = true
                 onCode(code)
             }

@@ -89,11 +89,7 @@ actor AuthService {
         var req = URLRequest(url: url)
         req.httpMethod = "POST"
         req.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
-        var c = URLComponents()
-        c.queryItems = fields.map { URLQueryItem(name: $0.key, value: $0.value) }
-        req.httpBody = c.percentEncodedQuery?
-            .replacingOccurrences(of: "+", with: "%2B")
-            .data(using: .utf8)
+        req.httpBody = formEncode(fields)
         let (data, _) = try await URLSession.shared.data(for: req)
         return (try? JSONSerialization.jsonObject(with: data) as? [String: Any]) ?? [:]
     }
