@@ -73,9 +73,23 @@ Headers on every call: `Authorization: Bearer …`, `X-Experience-Name: Adventur
 
 ## Downloads
 
-The episode `download_url` and HLS segments return 401 to anything except the official client's exact request shape.
-Making downloads work would mean disguising NeoClub's requests as the official app's, which we don't do. The download UI is kept so it
-works if the server starts accepting the requests.
+Media on `media.adventuresinodyssey.com` sits behind a CloudFront Function that runs before the signature check.
+Findings (2026-11-11, one 1-minute bonus song, read-only):
+
+- **Plain HTTP client** (URLSession, ephemeral, no cookies) on the signed `download_url`: `401`, `x-cache: FunctionGeneratedResponse`.
+  The function rejects the request before CloudFront checks the URL signature. Apple's media stack (`AppleCoreMedia`) gets through, which is why streaming works.
+- **AVAssetExportSession passthrough / AVAssetReader** on the remote `.mp4`: `AVFoundationErrorDomain -11838` (← `-16976`).
+  These don't support remote progressive assets.
+- **AVAssetDownloadURLSession** on the `.mp4`: fails immediately (`NSURLErrorDomain -1`). It only handles HLS. On the vphone VM it fails immediately for HLS too.
+- **AVAssetDownloadURLSession** on the HLS `stream_url` (simulator): the master playlist downloads (it carries its own signature).
+  The variant playlist then gets `403` from `nsurlsessiond`, which doesn't send the CloudFront cookies.
+  It still gets `403` with persistent cookies in `HTTPCookieStorage.shared` and with `AVURLAssetHTTPCookiesKey`.
+  Not yet verified: whether the undocumented `AVURLAssetHTTPHeaderFieldsKey` Cookie header helps (the test run didn't start, probably blocked by earlier stalled tasks).
+
+Remaining options:
+1. **Trace how the official app downloads** (Frida on `duo-lab`, observation only), then make the same request.
+   This would match the official client's request shape, but it may mean presenting the official app's User-Agent to get past the CloudFront Function. That's the user's call.
+2. **Retest HLS with the explicit Cookie header** on a real device, after cancelling the stalled background tasks.
 
 ## Font licensing
 
