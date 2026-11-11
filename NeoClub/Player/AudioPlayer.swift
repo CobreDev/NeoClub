@@ -25,7 +25,7 @@ final class AudioPlayer {
     var navigationRequest: Route?
 
     // MARK: Sleep timer (like Apple Podcasts)
-    enum SleepTimer: Hashable { case off, minutes(Int), endOfEpisode }
+    enum SleepTimer: Hashable { case off, minutes(Int), seconds(Int), endOfEpisode }
     private(set) var sleepTimer: SleepTimer = .off
     private(set) var sleepEndsAt: Date?
     private var sleepTask: Task<Void, Never>?
@@ -34,11 +34,14 @@ final class AudioPlayer {
         sleepTask?.cancel()
         sleepTimer = timer
         sleepEndsAt = nil
-        if case .minutes(let m) = timer {
-            let end = Date().addingTimeInterval(TimeInterval(m * 60))
+        var seconds = 0
+        if case .minutes(let m) = timer { seconds = m * 60 }
+        if case .seconds(let s) = timer { seconds = s }
+        if seconds > 0 {
+            let end = Date().addingTimeInterval(TimeInterval(seconds))
             sleepEndsAt = end
             sleepTask = Task { [weak self] in
-                try? await Task.sleep(for: .seconds(Double(m * 60)))
+                try? await Task.sleep(for: .seconds(Double(seconds)))
                 guard !Task.isCancelled, let self else { return }
                 self.pause()
                 self.sleepTimer = .off

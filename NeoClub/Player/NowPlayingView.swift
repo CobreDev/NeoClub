@@ -167,11 +167,14 @@ struct NowPlayingView: View {
 /// Apple-style scrubber: a thin capsule with no thumb that thickens while dragging; times below.
 private struct ScrubberBar: View {
     @Environment(AudioPlayer.self) private var player
-    @State private var dragFraction: Double?
+    /// Resets automatically if the drag is cancelled (e.g. by the sheet's dismiss gesture).
+    @GestureState private var dragFraction: Double?
+    /// Holds the released position until the seek lands, so the bar doesn't jump back.
+    @State private var pendingFraction: Double?
 
     var body: some View {
         let total = max(player.duration, 1)
-        let fraction = dragFraction ?? min(1, player.position / total)
+        let fraction = dragFraction ?? pendingFraction ?? min(1, player.position / total)
         let dragging = dragFraction != nil
         VStack(spacing: 8) {
             GeometryReader { g in
@@ -183,11 +186,13 @@ private struct ScrubberBar: View {
                 .frame(height: dragging ? 12 : 7)
                 .frame(maxHeight: .infinity)
                 .contentShape(.rect)
-                .gesture(DragGesture(minimumDistance: 0)
-                    .onChanged { v in dragFraction = min(1, max(0, v.location.x / g.size.width)) }
-                    .onEnded { _ in
-                        if let f = dragFraction { player.seek(to: f * total) }
-                        dragFraction = nil
+                .highPriorityGesture(DragGesture(minimumDistance: 0)
+                    .updating($dragFraction) { v, state, _ in state = min(1, max(0, v.location.x / g.size.width)) }
+                    .onEnded { v in
+                        let f = min(1, max(0, v.location.x / g.size.width))
+                        pendingFraction = f
+                        player.seek(to: f * total)
+                        Task { try? await Task.sleep(for: .milliseconds(600)); pendingFraction = nil }
                     })
                 .animation(.spring(response: 0.25, dampingFraction: 0.8), value: dragging)
             }
@@ -265,6 +270,9 @@ private struct SleepTimerButton: View {
             ForEach([60, 45, 30, 15, 5], id: \.self) { m in
                 Button("\(m) Minutes") { player.setSleepTimer(.minutes(m)) }
             }
+            #if DEBUG
+            Button("10 Seconds (Debug)") { player.setSleepTimer(.seconds(10)) }
+            #endif
             if player.sleepTimer != .off {
                 Divider()
                 Button("Turn Off Timer", role: .destructive) { player.setSleepTimer(.off) }
