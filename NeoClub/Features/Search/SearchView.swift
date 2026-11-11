@@ -33,7 +33,10 @@ struct SearchView: View {
         .navigationTitle("Search")
         .searchable(text: $query, prompt: "Episodes, albums, characters")
         .task(id: query) {
+            // iOS smart punctuation turns ' into ’, which the AIO search doesn't match.
             let term = query.trimmingCharacters(in: .whitespaces)
+                .replacingOccurrences(of: "\u{2019}", with: "'").replacingOccurrences(of: "\u{2018}", with: "'")
+                .replacingOccurrences(of: "\u{201C}", with: "\"").replacingOccurrences(of: "\u{201D}", with: "\"")
             guard term.count >= 2 else { hits = []; return }
             // Debounce typing so we search once the user pauses, not on every keystroke.
             try? await Task.sleep(for: .milliseconds(450))
