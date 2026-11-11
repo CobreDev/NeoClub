@@ -10,9 +10,8 @@ extension Color {
     static let aioYellow = Color(hex: 0xF9D548)
     static let aioRed = Color(hex: 0xD80000)
 
-    /// Tint that stays legible on both light and dark backgrounds.
-    static let aioTint = Color(UIColor { $0.userInterfaceStyle == .dark
-        ? UIColor(Color.aioSky) : UIColor(Color.aioBlue) })
+    /// App-wide tint: the official club yellow (the app always uses the dark, branded-blue look).
+    static let aioTint = aioYellow
 
     init(hex: UInt32) {
         self.init(.sRGB,

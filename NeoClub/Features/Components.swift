@@ -149,8 +149,10 @@ struct EpisodeRow: View {
                     if episode.isPlayable { Button(action: onPlay) {
                         Label(playLabel, systemImage: isCurrent && player.isPlaying ? "pause.fill" : "play.fill")
                             .font(.universBold(13, relativeTo: .footnote))
+                            .foregroundStyle(Color.aioYellow)
                     }
                     .buttonStyle(.bordered)
+                    .tint(.white)
                     .buttonBorderShape(.capsule)
                     .controlSize(.small) }
                     ProgressIndicator(progress: player.progress(for: episode), durationMs: episode.mediaLength)
