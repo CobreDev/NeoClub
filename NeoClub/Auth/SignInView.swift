@@ -14,16 +14,22 @@ struct SignInView: View {
     var body: some View {
         VStack(spacing: 24) {
             Spacer()
-            Image(systemName: "headphones.circle.fill")
-                .font(.system(size: 88))
-                .foregroundStyle(.tint)
-            Text("NeoClub")
-                .font(.largeTitle.bold())
+            BrandImage(name: "club_logo_2026")
+                .scaledToFit()
+                .frame(maxWidth: 300)
+                .accessibilityLabel("Adventures in Odyssey Club")
+            Text("Welcome to the Club!")
+                .font(.jacoby(30))
+                .foregroundStyle(.white)
             Text("Sign in with your Adventures in Odyssey Club account.")
+                .font(.univers(17))
                 .multilineTextAlignment(.center)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.white.opacity(0.8))
             if let error {
-                Text(error).foregroundStyle(.red).font(.callout)
+                Text(error)
+                    .font(.univers(15))
+                    .foregroundStyle(Color.aioYellow)
+                    .multilineTextAlignment(.center)
             }
             Spacer()
             Button {
@@ -35,14 +41,17 @@ struct SignInView: View {
                 Group {
                     if isExchanging { ProgressView() } else { Text("Sign In") }
                 }
+                .font(.universBold(18))
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 6)
             }
-            .buttonStyle(.borderedProminent)
+            .aioPrimaryButton()
             .disabled(isExchanging)
         }
         .padding(32)
         .frame(maxWidth: 480)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background { AIOBackdrop() }
         .sheet(isPresented: $showingWeb) {
             NavigationStack {
                 ZStack {

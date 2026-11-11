@@ -4,11 +4,13 @@ import SwiftUI
 struct BrowseView: View {
     private struct Section: Identifiable {
         let type: String, title: String, art: String
-        var id: String { type }
+        var filter: GroupingFilter = .all
+        var id: String { "\(type)-\(filter)" }
     }
 
     private let sections = [
-        Section(type: "Album", title: "Albums", art: "hero_albums"),
+        Section(type: "Album", title: "Albums", art: "hero_albums", filter: .regularAlbums),
+        Section(type: "Album", title: "Club Adventures", art: "hero_characters", filter: .clubAlbums),
         Section(type: "Series", title: "Series", art: "hero_series"),
         Section(type: "Collection", title: "Collections", art: "hero_episodes"),
         Section(type: "Podcast Year", title: "Podcasts", art: "hero_radio"),
@@ -19,7 +21,7 @@ struct BrowseView: View {
         ScrollView {
             LazyVGrid(columns: [GridItem(.adaptive(minimum: 300), spacing: 14)], spacing: 14) {
                 ForEach(sections) { s in
-                    NavigationLink(value: Route.groupingList(type: s.type, title: s.title)) {
+                    NavigationLink(value: Route.groupingList(type: s.type, title: s.title, filter: s.filter)) {
                         ZStack(alignment: .bottomLeading) {
                             BrandImage(name: s.art).scaledToFill()
                                 .frame(height: 120).clipped()
@@ -46,6 +48,7 @@ struct BrowseView: View {
 struct GroupingGridView: View {
     let type: String
     let title: String
+    var filter: GroupingFilter = .all
     @State private var groupings: [Grouping] = []
     @State private var page = 0
     @State private var totalPages = 1
@@ -84,13 +87,39 @@ struct GroupingGridView: View {
         defer { loading = false }
         do {
             let response = try await AIOService.groupings(type: type, page: page + 1)
-            let fresh = (response.contentGroupings ?? []).filter { g in !groupings.contains { $0.id == g.id } }
+            let fresh = (response.contentGroupings ?? [])
+                .filter { g in filter.includes(g) && !groupings.contains { $0.id == g.id } }
             groupings += fresh
             page += 1
             totalPages = response.metadata?.totalPageCount ?? page
             error = nil
+            // A filtered page can come back nearly empty; keep paging so the grid fills the screen.
+            if filter != .all && fresh.count < 6 && page < totalPages {
+                loading = false
+                await loadMore()
+            }
         } catch {
             self.error = error.localizedDescription
         }
+    }
+}
+
+/// Splits the AIO album list: regular numbered albums vs. the club-exclusive "½" seasons.
+enum GroupingFilter: String, Hashable {
+    case all, regularAlbums, clubAlbums
+
+    func includes(_ g: Grouping) -> Bool {
+        switch self {
+        case .all: return true
+        case .regularAlbums: return !Self.isClub(g)
+        case .clubAlbums: return Self.isClub(g)
+        }
+    }
+
+    /// Club seasons are numbered with a half (album_number "79.5", name "#79 ½: Club Season 12…").
+    static func isClub(_ g: Grouping) -> Bool {
+        if let n = g.albumNumber, n.contains(".") { return true }
+        let name = g.name ?? ""
+        return name.contains("½") || name.localizedCaseInsensitiveContains("Club Season")
     }
 }
