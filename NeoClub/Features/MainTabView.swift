@@ -5,21 +5,36 @@ struct MainTabView: View {
     @Environment(AudioPlayer.self) private var player
     @Environment(DownloadStore.self) private var downloads
 
+    enum TabID: Hashable { case home, browse, library, search }
+    @State private var tab: TabID = .home
+    @State private var paths: [TabID: NavigationPath] = [:]
+
+    private func path(_ id: TabID) -> Binding<NavigationPath> {
+        Binding(get: { paths[id] ?? NavigationPath() }, set: { paths[id] = $0 })
+    }
+
     var body: some View {
         @Bindable var player = player
-        TabView {
-            Tab("Home", systemImage: "house.fill") {
-                NavigationStack { HomeView().aioDestinations() }
+        TabView(selection: $tab) {
+            Tab("Home", systemImage: "house.fill", value: .home) {
+                NavigationStack(path: path(.home)) { HomeView().aioDestinations() }
             }
-            Tab("Browse", systemImage: "square.grid.2x2.fill") {
-                NavigationStack { BrowseView().aioDestinations() }
+            Tab("Browse", systemImage: "square.grid.2x2.fill", value: .browse) {
+                NavigationStack(path: path(.browse)) { BrowseView().aioDestinations() }
             }
-            Tab("Library", systemImage: "books.vertical.fill") {
-                NavigationStack { LibraryView().aioDestinations() }
+            Tab("Library", systemImage: "books.vertical.fill", value: .library) {
+                NavigationStack(path: path(.library)) { LibraryView().aioDestinations() }
             }
-            Tab(role: .search) {
-                NavigationStack { SearchView().aioDestinations() }
+            Tab(value: .search, role: .search) {
+                NavigationStack(path: path(.search)) { SearchView().aioDestinations() }
             }
+        }
+        // "Go to Album" / "Go to Episode" from Now Playing: close the player and open it on the current tab.
+        .onChange(of: player.navigationRequest) { _, route in
+            guard let route else { return }
+            player.showNowPlaying = false
+            paths[tab, default: NavigationPath()].append(route)
+            player.navigationRequest = nil
         }
         .tabBarMinimizeBehavior(.onScrollDown)
         .tabViewBottomAccessory(isEnabled: player.hasItem) {

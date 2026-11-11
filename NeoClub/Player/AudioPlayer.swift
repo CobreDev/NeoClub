@@ -17,6 +17,26 @@ final class AudioPlayer {
     private(set) var errorMessage: String?
     var rate: Float = 1.0 { didSet { if isPlaying { player.rate = rate } } }
     var showNowPlaying = false
+    /// Album/collection the current episode was started from (for "Go to Album").
+    private(set) var groupingID: String?
+    /// Recently played episodes, newest first, persisted across launches.
+    private(set) var history: [HistoryEntry] = HistoryEntry.load()
+    /// Set to ask the tab shell to dismiss Now Playing and navigate somewhere.
+    var navigationRequest: Route?
+
+    struct HistoryEntry: Codable, Identifiable, Hashable {
+        let id: String
+        let title: String
+        let album: String?
+        let artwork: String?
+        var playedAt: Date
+
+        static let key = "playHistory"
+        static func load() -> [HistoryEntry] {
+            guard let d = UserDefaults.standard.data(forKey: key) else { return [] }
+            return (try? JSONDecoder().decode([HistoryEntry].self, from: d)) ?? []
+        }
+    }
 
     /// Latest known progress per episode, so lists update immediately while listening.
     private(set) var progressOverrides: [String: ListenProgress] = [:]
@@ -80,7 +100,34 @@ final class AudioPlayer {
     func playNext() {
         guard !queue.isEmpty else { return }
         let next = queue.removeFirst()
-        play(next, queue: queue)
+        play(next, queue: queue, groupingID: groupingID)
+    }
+
+    /// Jumps to an episode in Up Next, keeping the episodes after it queued.
+    func playQueued(_ item: Episode) {
+        guard let i = queue.firstIndex(where: { $0.id == item.id }) else { return }
+        play(item, queue: Array(queue.dropFirst(i + 1)), groupingID: groupingID)
+    }
+
+    /// Replays something from History (its album context isn't kept, so nothing is queued after it).
+    func playFromHistory(_ entry: HistoryEntry) {
+        let json = try? JSONSerialization.data(withJSONObject: ["id": entry.id, "name": entry.title,
+                                                                "thumbnail_medium": entry.artwork ?? ""])
+        guard let json, let stub = try? JSONDecoder().decode(Episode.self, from: json) else { return }
+        play(stub)
+    }
+
+    /// Name of the current audio output, e.g. "Cooper's AirPods Pro" or "iPhone".
+    var outputName: String {
+        AVAudioSession.sharedInstance().currentRoute.outputs.first?.portName ?? "iPhone"
+    }
+
+    private func recordHistory(_ e: Episode) {
+        history.removeAll { $0.id == e.id }
+        history.insert(HistoryEntry(id: e.id, title: e.title, album: e.albumTitle,
+                                    artwork: e.thumbnailMedium ?? e.thumbnailSmall, playedAt: Date()), at: 0)
+        history = Array(history.prefix(50))
+        UserDefaults.standard.set(try? JSONEncoder().encode(history), forKey: HistoryEntry.key)
     }
 
     func stop() {
@@ -104,6 +151,7 @@ final class AudioPlayer {
         errorMessage = nil
         episode = item
         self.queue = queue
+        self.groupingID = groupingID
         defer { isLoading = false }
 
         do {
@@ -119,6 +167,7 @@ final class AudioPlayer {
             }
             guard episode?.id == item.id else { return }
             episode = detail
+            recordHistory(detail)
 
             let asset: AVURLAsset
             if let local {

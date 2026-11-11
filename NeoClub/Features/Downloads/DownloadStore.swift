@@ -1,10 +1,14 @@
+import AVFoundation
 import Foundation
 import SwiftUI
 
-/// Offline episodes: the signed AAC download for each episode, plus its metadata, in Application Support.
+/// Offline episodes. Fetches the same signed HLS stream the player uses (playlist + AAC segments,
+/// with the CloudFront cookies), one segment at a time, joins them, and repackages the audio as a
+/// seekable .m4a without re-encoding. Apple's out-of-process HLS downloader doesn't send the
+/// CloudFront cookies, so the app does the fetching itself, using exactly the requests streaming makes.
 @MainActor
 @Observable
-final class DownloadStore: NSObject {
+final class DownloadStore {
     static let shared = DownloadStore()
 
     struct Item: Codable, Identifiable {
@@ -22,22 +26,27 @@ final class DownloadStore: NSObject {
     private(set) var items: [Item] = []
     /// In-flight downloads: episode ID → fraction complete.
     private(set) var active: [String: Double] = [:]
+    /// Episodes currently downloading, newest first (for the Library's "Downloading" section).
+    private(set) var downloading: [Episode] = []
     var lastError: String?
 
     private let directory: URL
-    private var session: URLSession!
-    private var pending: [Int: (episode: Episode, raw: Data)] = [:]
+    private var jobs: [String: Task<Void, Never>] = [:]
+    private let session: URLSession = {
+        let c = URLSessionConfiguration.default
+        c.httpCookieAcceptPolicy = .never
+        c.httpShouldSetCookies = false
+        return URLSession(configuration: c)
+    }()
 
-    override private init() {
+    private init() {
         directory = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("Downloads", isDirectory: true)
-        super.init()
         try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         var dir = directory
         var values = URLResourceValues()
         values.isExcludedFromBackup = true
         try? dir.setResourceValues(values)
-        session = URLSession(configuration: .default, delegate: self, delegateQueue: .main)
         load()
     }
 
@@ -56,49 +65,133 @@ final class DownloadStore: NSObject {
     func download(_ episode: Episode) {
         guard !isDownloaded(episode.id), active[episode.id] == nil else { return }
         active[episode.id] = 0
-        Task {
-            do {
-                // Fresh detail: download URLs are signed and expire.
-                let raw = try await APIClient.shared.raw("GET", "/content/\(episode.id)", query: [
-                    "player": "true", "recommendations": "false", "tag": "false", "series": "false", "parent": "false",
-                ])
-                let detail = try JSONDecoder().decode(Episode.self, from: raw)
-                guard let url = URL.aio(detail.downloadURL) else { throw APIError.decoding("No download available for this episode.") }
-                let task = session.downloadTask(with: url)
-                pending[task.taskIdentifier] = (detail, raw)
-                task.resume()
-            } catch {
-                active[episode.id] = nil
-                lastError = error.localizedDescription
-            }
-        }
+        downloading.insert(episode, at: 0)
+        jobs[episode.id] = Task { await run(episode) }
+    }
+
+    func cancel(_ id: String) {
+        jobs[id]?.cancel()
     }
 
     func delete(_ id: String) {
-        guard let item = items.first(where: { $0.id == id }) else { return }
-        try? FileManager.default.removeItem(at: directory.appendingPathComponent(item.fileName))
+        if let url = localFile(for: id) { try? FileManager.default.removeItem(at: url) }
         items.removeAll { $0.id == id }
         save()
     }
 
     var totalBytes: Int64 { items.reduce(0) { $0 + $1.bytes } }
 
-    private func finish(task: Int, at location: URL) {
-        guard let (episode, raw) = pending.removeValue(forKey: task) else { return }
-        let fileName = "\(episode.id).m4a"
-        let dest = directory.appendingPathComponent(fileName)
-        try? FileManager.default.removeItem(at: dest)
+    // MARK: Download pipeline
+
+    private func run(_ episode: Episode) async {
+        let work = FileManager.default.temporaryDirectory.appendingPathComponent("dl-\(episode.id)", isDirectory: true)
+        defer {
+            try? FileManager.default.removeItem(at: work)
+            active[episode.id] = nil
+            downloading.removeAll { $0.id == episode.id }
+            jobs[episode.id] = nil
+        }
         do {
-            try FileManager.default.moveItem(at: location, to: dest)
+            try FileManager.default.createDirectory(at: work, withIntermediateDirectories: true)
+            // Fresh detail: stream URL and cookies are signed and expire.
+            let raw = try await APIClient.shared.raw("GET", "/content/\(episode.id)", query: [
+                "player": "true", "recommendations": "false", "tag": "false", "series": "false", "parent": "false",
+            ])
+            let detail = try JSONDecoder().decode(Episode.self, from: raw)
+            guard let master = URL.aio(detail.streamURL) else { throw APIError.decoding("This episode can't be downloaded.") }
+            let cookieHeader = HTTPCookie.requestHeaderFields(with: AudioPlayer.cloudFrontCookies(from: detail.signedCookie))
+
+            // 1. Master playlist → highest-bandwidth audio rendition.
+            let variant = bestVariant(in: try await fetchText(master, cookies: cookieHeader), relativeTo: master)
+            // 2. Rendition playlist → ordered segment URLs.
+            let segments = Self.segmentURLs(in: try await fetchText(variant, cookies: cookieHeader), relativeTo: variant)
+            guard !segments.isEmpty else { throw APIError.decoding("This episode has no audio to download.") }
+
+            // 3. Fetch segments in order (like playback), strip each one's ID3 timing tag, and append.
+            let joined = work.appendingPathComponent("audio.aac")
+            FileManager.default.createFile(atPath: joined.path, contents: nil)
+            let handle = try FileHandle(forWritingTo: joined)
+            for (i, url) in segments.enumerated() {
+                try Task.checkCancellation()
+                var req = URLRequest(url: url)
+                cookieHeader.forEach { req.setValue($1, forHTTPHeaderField: $0) }
+                let (data, response) = try await session.data(for: req)
+                guard (response as? HTTPURLResponse)?.statusCode == 200, !data.isEmpty else {
+                    try? handle.close()
+                    throw APIError.http((response as? HTTPURLResponse)?.statusCode ?? 0, "Segment \(i + 1) failed")
+                }
+                try handle.write(contentsOf: Self.stripID3(data))
+                active[episode.id] = Double(i + 1) / Double(segments.count) * 0.95
+            }
+            try handle.close()
+
+            // 4. Repackage ADTS AAC into a seekable .m4a (passthrough, no re-encode).
+            let fileName = "\(episode.id).m4a"
+            let dest = directory.appendingPathComponent(fileName)
+            try? FileManager.default.removeItem(at: dest)
+            try await Self.remux(joined, to: dest)
+            active[episode.id] = 1
+
             let bytes = (try? FileManager.default.attributesOfItem(atPath: dest.path)[.size] as? Int64) ?? 0
-            items.insert(Item(id: episode.id, fileName: fileName, title: episode.title, albumName: episode.albumName,
-                              subtitle: episode.subtitle, artwork: episode.thumbnailMedium ?? episode.thumbnailSmall,
+            items.insert(Item(id: detail.id, fileName: fileName, title: detail.title, albumName: detail.albumTitle,
+                              subtitle: detail.subtitle, artwork: detail.thumbnailMedium ?? detail.thumbnailSmall,
                               bytes: bytes, downloadedAt: Date(), episodeJSON: raw), at: 0)
             save()
+            SignInLog.write("download saved: \(segments.count) segments, \(bytes) bytes")
+        } catch is CancellationError {
+            SignInLog.write("download cancelled")
         } catch {
             lastError = error.localizedDescription
+            SignInLog.write("download failed: \(error.localizedDescription)")
         }
-        active[episode.id] = nil
+    }
+
+    private func fetchText(_ url: URL, cookies: [String: String]) async throws -> String {
+        var req = URLRequest(url: url)
+        cookies.forEach { req.setValue($1, forHTTPHeaderField: $0) }
+        let (data, response) = try await session.data(for: req)
+        guard (response as? HTTPURLResponse)?.statusCode == 200 else {
+            throw APIError.http((response as? HTTPURLResponse)?.statusCode ?? 0, "Playlist unavailable")
+        }
+        return String(decoding: data, as: UTF8.self)
+    }
+
+    private func bestVariant(in master: String, relativeTo base: URL) -> URL {
+        var best: (bandwidth: Int, uri: String)?
+        let lines = master.components(separatedBy: .newlines)
+        for (i, line) in lines.enumerated() where line.hasPrefix("#EXT-X-STREAM-INF") {
+            let bw = line.range(of: #"(?<!AVERAGE-)BANDWIDTH=(\d+)"#, options: .regularExpression)
+                .flatMap { Int(line[$0].split(separator: "=").last ?? "") } ?? 0
+            if i + 1 < lines.count, !lines[i + 1].isEmpty, bw > (best?.bandwidth ?? -1) { best = (bw, lines[i + 1]) }
+        }
+        // A master with no variants is itself the media playlist.
+        guard let best, let url = URL(string: best.uri, relativeTo: base)?.absoluteURL else { return base }
+        return url
+    }
+
+    static func segmentURLs(in playlist: String, relativeTo base: URL) -> [URL] {
+        playlist.components(separatedBy: .newlines)
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty && !$0.hasPrefix("#") }
+            .compactMap { URL(string: $0, relativeTo: base)?.absoluteURL }
+    }
+
+    /// HLS packed-audio segments start with an ID3v2 timestamp tag; drop it so segments join cleanly.
+    static func stripID3(_ data: Data) -> Data {
+        guard data.count > 10, data.prefix(3) == Data("ID3".utf8) else { return data }
+        let b = [UInt8](data[6..<10])
+        let size = Int(b[0]) << 21 | Int(b[1]) << 14 | Int(b[2]) << 7 | Int(b[3])
+        let footer = (data[5] & 0x10) != 0 ? 10 : 0
+        let end = 10 + size + footer
+        return end < data.count ? data.subdata(in: end..<data.count) : data
+    }
+
+    static func remux(_ source: URL, to dest: URL) async throws {
+        let asset = AVURLAsset(url: source)
+        guard let export = AVAssetExportSession(asset: asset, presetName: AVAssetExportPresetPassthrough) else {
+            throw APIError.decoding("Couldn't package the download.")
+        }
+        try await export.export(to: dest, as: .m4a)
     }
 
     private var indexURL: URL { directory.appendingPathComponent("index.json") }
@@ -110,44 +203,5 @@ final class DownloadStore: NSObject {
 
     private func save() {
         try? JSONEncoder().encode(items).write(to: indexURL, options: .atomic)
-    }
-}
-
-extension DownloadStore: URLSessionDownloadDelegate {
-    nonisolated func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didFinishDownloadingTo location: URL) {
-        // The temp file is deleted when this returns, so move it synchronously first.
-        let keep = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
-        let moved = (try? FileManager.default.moveItem(at: location, to: keep)) != nil
-        let status = (downloadTask.response as? HTTPURLResponse)?.statusCode ?? 0
-        let size = (try? FileManager.default.attributesOfItem(atPath: keep.path)[.size] as? Int64) ?? 0
-        let id = downloadTask.taskIdentifier
-        SignInLog.write("download finished: HTTP \(status), \(size) bytes, moved=\(moved)")
-        MainActor.assumeIsolated {
-            guard moved, status == 200, size > 0 else {
-                try? FileManager.default.removeItem(at: keep)
-                if let entry = pending.removeValue(forKey: id) { active[entry.episode.id] = nil }
-                lastError = "Download failed (HTTP \(status))."
-                return
-            }
-            finish(task: id, at: keep)
-        }
-    }
-
-    nonisolated func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didWriteData _: Int64,
-                                totalBytesWritten: Int64, totalBytesExpectedToWrite: Int64) {
-        let id = downloadTask.taskIdentifier
-        let fraction = totalBytesExpectedToWrite > 0 ? Double(totalBytesWritten) / Double(totalBytesExpectedToWrite) : 0
-        MainActor.assumeIsolated {
-            if let episodeID = pending[id]?.episode.id { active[episodeID] = fraction }
-        }
-    }
-
-    nonisolated func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
-        guard let error else { return }
-        let id = task.taskIdentifier
-        MainActor.assumeIsolated {
-            if let entry = pending.removeValue(forKey: id) { active[entry.episode.id] = nil }
-            lastError = error.localizedDescription
-        }
     }
 }

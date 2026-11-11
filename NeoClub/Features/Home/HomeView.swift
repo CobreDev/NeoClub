@@ -30,11 +30,16 @@ struct HomeView: View {
             ToolbarItem(placement: .topBarTrailing) {
                 Button { app.switchProfile() } label: {
                     if let profile = app.profile {
-                        ProfileBadge(profile: profile, size: 32, showsName: false)
+                        ProfileBadge(profile: profile, size: 36, showsName: false)
+                            .padding(4)
+                            .glassEffect(.regular.interactive(), in: .circle)
                     }
                 }
+                .buttonStyle(.plain)
                 .accessibilityLabel("Switch profile")
             }
+            // Drop the toolbar's shared capsule so the button is a circle matching the avatar.
+            .sharedBackgroundVisibility(.hidden)
         }
         .refreshable { await load() }
         .task { if home == nil { await load() } }
