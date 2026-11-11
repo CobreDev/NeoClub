@@ -23,7 +23,20 @@ actor AuthService {
     static let shared = AuthService()
     private static let keychainKey = "tokens"
 
-    private(set) var tokens: Tokens? = Keychain.getCodable(Tokens.self, for: AuthService.keychainKey)
+    private(set) var tokens: Tokens? = Keychain.getCodable(Tokens.self, for: AuthService.keychainKey) ?? AuthService.debugImportedTokens()
+
+    /// Simulator-only: reuse a session copied into Documents, so switching simulators doesn't need a new sign-in.
+    private static func debugImportedTokens() -> Tokens? {
+        #if DEBUG && targetEnvironment(simulator)
+        let url = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("debug-tokens.json")
+        guard let data = try? Data(contentsOf: url), let t = try? JSONDecoder().decode(Tokens.self, from: data) else { return nil }
+        Keychain.setCodable(t, for: keychainKey)
+        return t
+        #else
+        return nil
+        #endif
+    }
     private var refreshTask: Task<Tokens, Error>?
     private let tokenSession = URLSession(configuration: .ephemeral)
 

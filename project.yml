@@ -2,7 +2,7 @@ name: NeoClub
 options:
   bundleIdPrefix: com.cooperhull
   deploymentTarget:
-    iOS: "17.0"
+    iOS: "26.2"
   createIntermediateGroups: true
 settings:
   base:
@@ -33,3 +33,5 @@ targets:
       path: NeoClub/Info.plist
       properties:
         UIBackgroundModes: [audio]
+        UIAppFonts: [JacobyICGBlack.ttf, UniversRegular.ttf, UniversBold.ttf]
+        UIUserInterfaceStyle: Automatic
