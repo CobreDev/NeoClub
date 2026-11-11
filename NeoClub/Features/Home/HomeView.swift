@@ -5,6 +5,7 @@ struct HomeView: View {
     @Environment(AudioPlayer.self) private var player
     @State private var home: HomeResponse?
     @State private var error: String?
+    @State private var showAccount = false
 
     var body: some View {
         ScrollView {
@@ -28,7 +29,7 @@ struct HomeView: View {
         .navigationTitle("Home")
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
-                Button { app.switchProfile() } label: {
+                Button { showAccount = true } label: {
                     if let profile = app.profile {
                         ProfileBadge(profile: profile, size: 36, showsName: false)
                             .padding(4)
@@ -36,11 +37,12 @@ struct HomeView: View {
                     }
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel("Switch profile")
+                .accessibilityLabel("Account")
             }
             // Drop the toolbar's shared capsule so the button is a circle matching the avatar.
             .sharedBackgroundVisibility(.hidden)
         }
+        .sheet(isPresented: $showAccount) { AccountView() }
         .refreshable { await load() }
         .task { if home == nil { await load() } }
     }

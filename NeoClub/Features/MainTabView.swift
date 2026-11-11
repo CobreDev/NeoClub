@@ -5,7 +5,7 @@ struct MainTabView: View {
     @Environment(AudioPlayer.self) private var player
     @Environment(DownloadStore.self) private var downloads
 
-    enum TabID: Hashable { case home, browse, library, search }
+    enum TabID: Hashable { case home, browse, downloads, search }
     @State private var tab: TabID = .home
     @State private var paths: [TabID: NavigationPath] = [:]
 
@@ -22,8 +22,8 @@ struct MainTabView: View {
             Tab("Browse", systemImage: "square.grid.2x2.fill", value: .browse) {
                 NavigationStack(path: path(.browse)) { BrowseView().aioDestinations() }
             }
-            Tab("Library", systemImage: "books.vertical.fill", value: .library) {
-                NavigationStack(path: path(.library)) { LibraryView().aioDestinations() }
+            Tab("Downloads", systemImage: "arrow.down.circle.fill", value: .downloads) {
+                NavigationStack(path: path(.downloads)) { DownloadsView().aioDestinations() }
             }
             Tab(value: .search, role: .search) {
                 NavigationStack(path: path(.search)) { SearchView().aioDestinations() }

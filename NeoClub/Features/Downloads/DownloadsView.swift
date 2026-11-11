@@ -1,64 +1,5 @@
 import SwiftUI
 
-struct LibraryView: View {
-    @Environment(AppModel.self) private var app
-    @Environment(DownloadStore.self) private var downloads
-    @State private var syncProgress = ProgressSync.isEnabled
-
-    var body: some View {
-        List {
-            if let profile = app.profile {
-                Section {
-                    HStack(spacing: 14) {
-                        ProfileBadge(profile: profile, size: 52, showsName: false)
-                        VStack(alignment: .leading) {
-                            Text(profile.displayName).font(.universBold(18))
-                            Text("Listening profile").font(.univers(14)).foregroundStyle(.secondary)
-                        }
-                        Spacer()
-                        Button("Switch") { app.switchProfile() }.buttonStyle(.bordered)
-                    }
-                    .aioRow()
-                }
-            }
-            if !downloads.downloading.isEmpty {
-                Section("Downloading") {
-                    ForEach(downloads.downloading) { DownloadingRow(episode: $0).aioRow() }
-                }
-            }
-            Section {
-                NavigationLink(value: Route.downloads) {
-                    Label {
-                        HStack {
-                            Text("Downloads")
-                            Spacer()
-                            Text("\(downloads.items.count)").foregroundStyle(.secondary)
-                        }
-                    } icon: { Image(systemName: "arrow.down.circle.fill") }
-                }
-                .aioRow()
-            }
-            Section {
-                Toggle("Sync Listening Progress", isOn: $syncProgress)
-                    .onChange(of: syncProgress) { _, on in ProgressSync.isEnabled = on }
-                    .aioRow()
-            } footer: {
-                Text("Saves where you stop listening to your Adventures in Odyssey Club account, like the official app.")
-            }
-            #if DEBUG
-            Section("Developer") {
-                NavigationLink("API Explorer") { APIExplorerView() }.aioRow()
-            }
-            #endif
-            Section {
-                Button("Sign Out", role: .destructive) { Task { await app.signOut() } }.aioRow()
-            }
-        }
-        .aioBackground("bg_treasure.jpg")
-        .navigationTitle("Library")
-    }
-}
-
 struct DownloadsView: View {
     @Environment(DownloadStore.self) private var downloads
     @Environment(AudioPlayer.self) private var player
@@ -96,7 +37,7 @@ struct DownloadsView: View {
                                        description: Text("Download episodes to listen without a connection."))
             }
         }
-        .aioBackground()
+        .aioBackground("bg_treasure.jpg")
         .navigationTitle("Downloads")
         .toolbar {
             if !downloads.items.isEmpty {

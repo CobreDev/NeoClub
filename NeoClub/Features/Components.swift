@@ -5,7 +5,6 @@ enum Route: Hashable {
     case episode(Episode, groupingID: String?)
     case grouping(id: String, preview: Grouping?)
     case groupingList(type: String, title: String, filter: GroupingFilter = .all)
-    case downloads
 }
 
 extension View {
@@ -15,7 +14,6 @@ extension View {
             case .episode(let e, let gid): EpisodeView(episode: e, groupingID: gid)
             case .grouping(let id, let preview): GroupingView(groupingID: id, preview: preview)
             case .groupingList(let type, let title, let filter): GroupingGridView(type: type, title: title, filter: filter)
-            case .downloads: DownloadsView()
             }
         }
     }
