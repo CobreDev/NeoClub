@@ -55,18 +55,19 @@ struct NowPlayingView: View {
         .presentationBackground(Color.aioNavy)
     }
 
-    /// Grabber centered 21 pt below the screen's top edge (Apple Music).
-    private var grabberTop: CGFloat { max(0, 9 - insets.top) }
+    /// Grabber centered ~21 pt below the screen's top edge on the outer screen and ~23 pt on the inner screen
+    /// (Apple Music), whatever the top inset: on the inner screen upright the inset is ~89 pt and Music ignores it.
+    private func grabberTop(large: Bool) -> CGFloat { (large ? 10 : 9) - insets.top }
 
     /// The grabber; tapping it closes Now Playing, like Apple Music.
-    private var grabber: some View {
+    private func grabber(large: Bool = false) -> some View {
         Button { player.showNowPlaying = false } label: {
             Capsule().fill(.white.opacity(0.35)).frame(width: 36, height: 5)
                 .frame(width: 120, height: 24)
                 .contentShape(.rect)
         }
         .buttonStyle(.plain)
-        .padding(.top, grabberTop)
+        .padding(.top, grabberTop(large: large))
         .accessibilityLabel("Close Now Playing")
     }
 
@@ -81,14 +82,15 @@ struct NowPlayingView: View {
         let lead = narrow ? max(0, 32 - insets.leading) : 28
         let trail = narrow ? max(0, 32 - insets.trailing) : 28
         let content = min(size.width - lead - trail, 513)
+        let large = size.height > 800
         return VStack(spacing: 0) {
-            grabber
+            grabber(large: large)
             VStack(spacing: 0) {
                 if mode == .artwork {
                     Spacer(minLength: 22)
                     // Up to the column width, smaller when the screen is short, so the controls below never move.
                     bigArtwork.frame(maxWidth: content, maxHeight: content)
-                    titleRow.padding(.top, 21)
+                    titleRow(large: large).padding(.top, 21)
                 } else {
                     compactHeader.padding(.top, 18)
                     if narrow { modeCapsules.padding(.top, 16) }
@@ -96,7 +98,7 @@ struct NowPlayingView: View {
                 }
             }
             .frame(maxHeight: .infinity, alignment: mode == .artwork ? .bottom : .top)
-            controls(narrow: narrow, large: size.height > 800)
+            controls(narrow: narrow, large: large)
         }
         .frame(width: content)
         .padding(.leading, narrow ? lead : 0)
@@ -106,13 +108,14 @@ struct NowPlayingView: View {
     }
 
     /// Scrubber, transport, volume and the bottom buttons: the part that never moves. Gaps measured from Apple
-    /// Music on the Duo's outer screen (compact) and its inner screen upright (large).
+    /// Music on the Duo's outer screen (compact) and its inner screen upright (large, overlaid on a vphone
+    /// screenshot of Music: title caps at 673, album 699, scrubber 749, transport 822, volume 896, buttons 965).
     private func controls(narrow: Bool, large: Bool) -> some View {
         VStack(spacing: 0) {
-            ScrubberBar().padding(.top, large ? 29 : 7)
-            transport(narrow: narrow).padding(.top, large ? 9 : 0)
-            VolumeBar().padding(.top, large ? 30 : 26)
-            bottomBar.padding(.top, large ? 37 : 22)
+            ScrubberBar().padding(.top, large ? 16.5 : 7)
+            transport(narrow: narrow).padding(.top, large ? 11 : 0)
+            VolumeBar().padding(.top, large ? 31 : 26)
+            bottomBar.padding(.top, large ? 34 : 22)
         }
     }
 
@@ -136,7 +139,7 @@ struct NowPlayingView: View {
             .frame(height: half)
 
             VStack(spacing: 0) {
-                if mode == .artwork { titleRow } else { Color.clear.frame(height: 1) }
+                if mode == .artwork { titleRow() } else { Color.clear.frame(height: 1) }
                 Spacer(minLength: 10)
                 ScrubberBar()
                 Spacer(minLength: 10)
@@ -159,13 +162,13 @@ struct NowPlayingView: View {
         let column: CGFloat = 400
         let art = min(330, size.height * 0.48)
         return VStack(spacing: 0) {
-            grabber
+            grabber()
             HStack(spacing: 0) {
                 VStack(spacing: 0) {
                     Spacer(minLength: 8)
                     bigArtwork.frame(width: art, height: art)
                     Spacer(minLength: 20)
-                    titleRow
+                    titleRow()
                     ScrubberBar().padding(.top, 18)
                     transport(narrow: false).padding(.top, 18)
                     VolumeBar().padding(.top, 22)
@@ -191,7 +194,7 @@ struct NowPlayingView: View {
     /// Landscape: output route bottom-left, Info and Up Next bottom-right (Apple Music on a wide screen).
     private var landscapeBottomBar: some View {
         HStack(spacing: 10) {
-            RoutePicker().frame(width: 30, height: 26)
+            RoutePicker(symbol: player.route.symbol, size: 17).frame(width: 30, height: 26)
             Text(player.outputName)
                 .font(.univers(13, relativeTo: .caption))
                 .opacity(0.6)
@@ -220,7 +223,8 @@ struct NowPlayingView: View {
         artworkImage(cornerRadius: 10)
             .matchedGeometryEffect(id: "artwork", in: ns)
             .shadow(color: .black.opacity(player.isPlaying ? 0.45 : 0.2), radius: player.isPlaying ? 28 : 10, y: 14)
-            .scaleEffect(player.isPlaying ? 1 : 0.78)
+            // Paused, Apple Music shrinks the artwork to ~73% (measured on the vphone Duo's inner screen).
+            .scaleEffect(player.isPlaying ? 1 : 0.73)
             .animation(.spring(response: 0.5, dampingFraction: 0.7), value: player.isPlaying)
     }
 
@@ -235,17 +239,17 @@ struct NowPlayingView: View {
     // MARK: Pieces
 
     /// Title over album (Apple: ~20pt semibold over ~20pt secondary), bookmark and ⋯ on the right.
-    private var titleRow: some View {
+    private func titleRow(large: Bool = false) -> some View {
         HStack(alignment: .center, spacing: 16) {
-            titles(size: 20)
+            titles(size: 20, lineSpacing: large ? -0.5 : -2)
             Spacer(minLength: 0)
             actions
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    private func titles(size: CGFloat) -> some View {
-        VStack(alignment: .leading, spacing: -2) {
+    private func titles(size: CGFloat, lineSpacing: CGFloat = -2) -> some View {
+        VStack(alignment: .leading, spacing: lineSpacing) {
             // Long titles scroll to show the whole thing, like Apple Music.
             MarqueeText(text: player.episode?.title ?? "", font: .universBold(size, relativeTo: .title3),
                         restartKey: PlayerCardModel.shared.visible)
@@ -332,10 +336,14 @@ struct NowPlayingView: View {
             toggle(.info, symbol: "info.circle", label: "About This Episode")
             Spacer()
             VStack(spacing: -2) {
-                RoutePicker().frame(width: 40, height: 40)
-                Text(player.outputName)
-                    .font(.univers(12, relativeTo: .caption))
-                    .opacity(0.6)
+                // The output's own glyph (AirPods, car, HomePod…), else AirPlay, like Apple Music.
+                RoutePicker(symbol: player.route.symbol).frame(width: 40, height: 40)
+                // Music names the output only when it isn't the phone itself; the line keeps its space either way,
+                // so the buttons don't move.
+                let name = player.route.label
+                Text(name ?? " ")
+                    .font(.universBold(12, relativeTo: .caption))
+                    .opacity(name == nil ? 0 : 0.7)
                     .lineLimit(1)
             }
             Spacer()
@@ -347,10 +355,12 @@ struct NowPlayingView: View {
         Button {
             withAnimation(Self.modeAnimation) { mode = (mode == target) ? .artwork : target }
         } label: {
+            // Sized, weighted and tinted to Apple Music's Lyrics and Up Next buttons (vphone Duo): ~21 pt glyphs,
+            // medium weight, white at ~73%.
             Image(systemName: symbol)
-                .font(.system(size: 19, weight: .semibold))
+                .font(.system(size: 20.5, weight: .medium))
                 .frame(width: 40, height: 40)
-                .foregroundStyle(mode == target ? Color.black.opacity(0.75) : .white.opacity(0.85))
+                .foregroundStyle(mode == target ? Color.black.opacity(0.75) : .white.opacity(0.73))
                 .background { if mode == target { Circle().fill(.white.opacity(0.8)) } }
         }
         .buttonStyle(.plain)
@@ -653,15 +663,34 @@ private struct QueuePanel: View {
     }
 }
 
-struct RoutePicker: UIViewRepresentable {
-    func makeUIView(context: Context) -> AVRoutePickerView {
-        let v = AVRoutePickerView()
-        v.tintColor = .white
-        v.activeTintColor = UIColor(Color.aioYellow)
-        v.prioritizesVideoDevices = false
-        return v
+/// The system output picker (tapping it opens iOS's own route list) showing the current output's glyph, like
+/// Apple Music's button: the picker's own glyph is always AirPlay, so it's drawn clear over an SF Symbol.
+struct RoutePicker: View {
+    var symbol: String = AudioRoute.airPlay
+    /// Glyph size; ~21 pt matches Apple Music's bottom row on the Duo.
+    var size: CGFloat = 21
+
+    var body: some View {
+        ZStack {
+            Image(systemName: symbol)
+                .font(.system(size: size, weight: .medium))
+                .foregroundStyle(.white.opacity(0.9))
+                .contentTransition(.symbolEffect(.replace))
+                .accessibilityHidden(true)
+            SystemPicker()
+        }
     }
-    func updateUIView(_ uiView: AVRoutePickerView, context: Context) {}
+
+    private struct SystemPicker: UIViewRepresentable {
+        func makeUIView(context: Context) -> AVRoutePickerView {
+            let v = AVRoutePickerView()
+            v.tintColor = .clear
+            v.activeTintColor = .clear
+            v.prioritizesVideoDevices = false
+            return v
+        }
+        func updateUIView(_ uiView: AVRoutePickerView, context: Context) {}
+    }
 }
 
 /// Bookmark toggle beside ⋯, where Apple Music has its favorite star.

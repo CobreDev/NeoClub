@@ -345,7 +345,16 @@ struct MarqueeText: View {
                 }
                 // Rest, glide one text-plus-gap left, repeat. A new identity starts it over from the beginning.
                 .keyframeAnimator(initialValue: CGFloat(0), repeating: overflows) { content, x in
+                    // The leading edge fades only while the text is moving, so at rest the first letter is
+                    // crisp (Apple Music). The mask isn't offset, so it stays on the box's leading edge.
                     content.offset(x: overflows ? x : 0)
+                        .mask(alignment: .leading) {
+                            HStack(spacing: 0) {
+                                LinearGradient(colors: [.clear, .black], startPoint: .leading, endPoint: .trailing)
+                                    .frame(width: min(8, max(0, -x)))
+                                Color.black
+                            }
+                        }
                 } keyframes: { _ in
                     KeyframeTrack {
                         LinearKeyframe(0, duration: pause)
@@ -358,7 +367,6 @@ struct MarqueeText: View {
             .mask {
                 if overflows {
                     HStack(spacing: 0) {
-                        LinearGradient(colors: [.clear, .black], startPoint: .leading, endPoint: .trailing).frame(width: 8)
                         Color.black
                         LinearGradient(colors: [.black, .clear], startPoint: .leading, endPoint: .trailing).frame(width: 16)
                     }

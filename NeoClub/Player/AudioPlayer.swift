@@ -94,7 +94,13 @@ final class AudioPlayer {
         NotificationCenter.default.addObserver(forName: UIApplication.willResignActiveNotification, object: nil, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated { self?.persistSession() }
         }
+        NotificationCenter.default.addObserver(forName: AVAudioSession.routeChangeNotification, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.route = AudioRoute.current }
+        }
     }
+
+    /// Where audio is going right now (kept current as headphones, cars and AirPlay come and go).
+    private(set) var route = AudioRoute.current
 
     // MARK: Last session (the mini player is always there, showing what was playing last)
 
@@ -278,9 +284,7 @@ final class AudioPlayer {
     }
 
     /// Name of the current audio output, e.g. "Cooper's AirPods Pro" or "iPhone".
-    var outputName: String {
-        AVAudioSession.sharedInstance().currentRoute.outputs.first?.portName ?? "iPhone"
-    }
+    var outputName: String { route.name }
 
     private func recordHistory(_ e: Episode) {
         history.removeAll { $0.id == e.id }
