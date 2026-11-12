@@ -101,9 +101,11 @@ private struct CategoryCard: View {
             artwork
                 .blur(radius: 6)
                 .mask(alignment: .topLeading) {
-                    RoundedRectangle(cornerRadius: 14)
-                        .frame(width: titleSize.width + 20, height: titleSize.height + 16)
-                        .blur(radius: 10)
+                    // A wide, soft feather: full blur behind the letters, easing out gradually around them.
+                    Capsule()
+                        .frame(width: max(0, titleSize.width - 4), height: max(0, titleSize.height - 14))
+                        .offset(x: 2, y: 7)
+                        .blur(radius: 16)
                 }
                 .allowsHitTesting(false)
             HStack(spacing: 6) {

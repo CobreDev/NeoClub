@@ -115,6 +115,8 @@ extension View {
     /// Applies the branded backdrop behind a screen (works for ScrollView and List).
     func aioBackground(_ art: String? = nil, artworkURL: URL? = nil) -> some View {
         scrollContentBackground(.hidden)
+            // The native bar's progressive blur as content scrolls under it.
+            .scrollEdgeEffectStyle(.soft, for: .top)
             .background { AIOBackground(art: art, artworkURL: artworkURL) }
     }
 

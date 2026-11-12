@@ -7,11 +7,11 @@ struct NeoClubApp: App {
     @State private var downloads = DownloadStore.shared
 
     init() {
-        // Transparent nav bars over the branded backdrop, with titles in the official AIO faces
+        // Native nav bars (system background and scroll-edge blur), with titles in the official AIO faces
         // (Jacoby for large titles, Univers for inline). Set via UINavigationBarAppearance so it
         // survives SwiftUI's toolbar configuration.
         let bar = UINavigationBarAppearance()
-        bar.configureWithTransparentBackground()
+        bar.configureWithDefaultBackground()
         if let jacoby = UIFont(name: "JacobyICGBlack", size: 34) {
             bar.largeTitleTextAttributes = [.font: UIFontMetrics(forTextStyle: .largeTitle).scaledFont(for: jacoby),
                                             .foregroundColor: UIColor.white]
