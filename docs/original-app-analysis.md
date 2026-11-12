@@ -85,7 +85,7 @@ accept-encoding: gzip
 host: media.adventuresinodyssey.com
 ```
 
-NeoClub's `DownloadStore.fetchFile` sends the same request. Verified working: the file saved is AAC in MP4.
+NeoClub's `DownloadStore.fetchFile` sends the same request. Verified working: episodes save as AAC in MP4 and some songs as MP3, with the extension taken from the URL.
 Dead ends:
 - AVAssetExportSession and AVAssetReader don't support remote progressive assets (`-11838`).
 - AVAssetDownloadURLSession doesn't send the CloudFront cookies for HLS variants (`403`).

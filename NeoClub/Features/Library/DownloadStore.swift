@@ -88,7 +88,9 @@ final class DownloadStore {
             ])
             let detail = try JSONDecoder().decode(Episode.self, from: raw)
             guard let remote = URL.aio(detail.downloadURL) else { throw APIError.decoding("This episode can't be downloaded.") }
-            let fileName = "\(episode.id).m4a"
+            // Episodes are AAC in MP4, some songs are MP3: keep the file's own type so AVFoundation reads it right.
+            let ext = remote.pathExtension.isEmpty ? "m4a" : remote.pathExtension.lowercased()
+            let fileName = "\(episode.id).\(ext)"
             let dest = directory.appendingPathComponent(fileName)
             try? FileManager.default.removeItem(at: dest)
 
