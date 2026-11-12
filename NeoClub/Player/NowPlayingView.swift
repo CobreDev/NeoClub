@@ -20,8 +20,14 @@ struct NowPlayingView: View {
 
     enum Mode { case artwork, info, queue }
 
-    /// Apple Music's switch between the player and Up Next: a smooth, non-bouncy spring.
-    static let modeAnimation = Animation.smooth(duration: 0.5)
+    /// Apple Music's switch between the player and Up Next, measured frame by frame on iOS 27.2: the artwork and
+    /// column move on a critically damped spring with a ~0.33 s response, starting at the tap.
+    static let modeAnimation = Animation.spring(response: 0.33, dampingFraction: 1.0)
+    /// The list doesn't move: it fades in where it sits a beat after the artwork starts moving, and on the way back
+    /// stays put while the artwork slides over it, then fades out.
+    static let panelTransition = AnyTransition.asymmetric(
+        insertion: .opacity.animation(.easeOut(duration: 0.2).delay(0.1)),
+        removal: .opacity.animation(.easeIn(duration: 0.15).delay(0.05)))
 
     var body: some View {
         GeometryReader { geo in
@@ -153,7 +159,7 @@ struct NowPlayingView: View {
                         .padding(.top, 20)
                         .frame(width: min(size.width * 0.4, 380))
                         .padding(.trailing, 32)
-                        .transition(.move(edge: .trailing).combined(with: .opacity))
+                        .transition(Self.panelTransition)
                 }
             }
             landscapeBottomBar
@@ -203,7 +209,7 @@ struct NowPlayingView: View {
             if mode == .info { InfoPanel() } else { QueuePanel() }
         }
         .frame(maxHeight: .infinity, alignment: .top)
-        .transition(.opacity)
+        .transition(Self.panelTransition)
     }
 
     // MARK: Pieces
@@ -261,7 +267,7 @@ struct NowPlayingView: View {
             SpeedButton().frame(maxWidth: .infinity, minHeight: 44).background(.white.opacity(0.14), in: .capsule)
             SleepTimerButton().frame(maxWidth: .infinity, minHeight: 44).background(.white.opacity(0.14), in: .capsule)
         }
-        .transition(.opacity)
+        .transition(Self.panelTransition)
     }
 
     /// Podcasts transport: speed · back 15 · play · forward 30 · sleep timer. Narrow screens show only the middle
