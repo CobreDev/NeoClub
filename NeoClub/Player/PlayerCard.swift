@@ -45,7 +45,7 @@ final class PlayerCardModel {
     /// Closing, the card takes the bar's shape on its own spring, started at release (but never ahead of its travel),
     /// so even a fast flick shrinks into the bar over ~170 ms instead of snapping in a frame. Slightly underdamped:
     /// Apple Music's card settles into the bar with a small bounce (recorded on the Duo).
-    static let landSpring = Animation.spring(response: 0.34, dampingFraction: 0.72)
+    static let landSpring = Animation.spring(response: 0.36, dampingFraction: 0.6)
 
     /// How far the card is from full screen toward the bar (0…1).
     private var travel: CGFloat {
@@ -137,8 +137,19 @@ struct CardGeometry: ViewModifier, Animatable {
     /// Once the card is at the bar, the morph alone drives it, so its bounce (past the bar's size and back) shows.
     var shape: CGFloat { closing ? (travel >= 0.999 ? morph : min(morph, pow(travel, 10))) : morph }
 
+    /// How much a landing overshoot squashes the bar (wider and flatter, like a drop of glass settling).
+    static let squash: CGFloat = 0.6
+
     var rect: CGRect {
         let m = shape
+        // Landing bounce: past the bar's shape, the card squashes about the bar's center (a little wider and flatter)
+        // and springs back, rather than shrinking smaller and drifting.
+        if closing && m > 1 {
+            let over = min(m - 1, 0.4)
+            let w = mini.width * (1 + Self.squash * over)
+            let h = mini.height * (1 - Self.squash * over * 0.5)
+            return CGRect(x: mini.midX - w / 2, y: mini.midY - h / 2, width: w, height: h)
+        }
         let width = full.width + (mini.width - full.width) * m
         let midX = full.midX + (mini.midX - full.midX) * m
         let height = full.height + (mini.height - full.height) * m
@@ -146,7 +157,8 @@ struct CardGeometry: ViewModifier, Animatable {
         let y0 = min(top, mini.minY)
         // Closing, the shrink also pulls the card the rest of the way down, so it lands on the bar's glass exactly as
         // it takes the bar's shape instead of shrinking first and then sliding into place.
-        let pull = closing ? min(1, max(0, m)) : 0
+        // Fully pinned to the bar once it's nearly bar-sized, so the bounce can't drag it back up.
+        let pull = closing ? min(1, max(0, m / 0.85)) : 0
         let y = y0 + (mini.minY - y0) * pull
         return CGRect(x: midX - width / 2, y: y, width: width, height: height)
     }
@@ -174,11 +186,19 @@ struct CardGeometry: ViewModifier, Animatable {
             .frame(width: r.width, height: r.height, alignment: .top)
             // …and the mini player's face cross-fades in at the top as the card turns into the bar.
             .overlay(alignment: .top) {
-                // No glass of its own: the real bar's glass is underneath when the card lands.
                 MiniPlayer(isCardFace: true)
                     .frame(width: mini.width, height: mini.height)
                     .opacity(Double(face))
                     .allowsHitTesting(false)
+            }
+            // As the card becomes the bar its background turns into Liquid Glass (the system material the bar is made
+            // of), so what lands and bounces is glass, not an opaque card over the bar.
+            .background {
+                if face > 0.01 {
+                    Color.clear
+                        .glassEffect(.regular, in: .rect(cornerRadius: radius, style: .continuous))
+                        .opacity(Double(face))
+                }
             }
             .clipShape(RoundedRectangle(cornerRadius: radius, style: .continuous))
             .position(x: r.midX - origin.x, y: r.midY - origin.y)
