@@ -2,7 +2,7 @@ import Foundation
 import Security
 
 enum Keychain {
-    private static let service = "com.cooperhull.neoclub"
+    private static let service = "dev.cobre.aioclub"
 
     static func set(_ data: Data?, for key: String) {
         let base: [String: Any] = [

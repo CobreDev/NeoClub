@@ -316,7 +316,7 @@ final class DownloadStore {
     /// Owns the background session and receives its callbacks (on a background queue), moving finished files into
     /// place right away (iOS deletes the temporary file when the callback returns).
     fileprivate final class BackgroundDownloader: NSObject, URLSessionDownloadDelegate, @unchecked Sendable {
-        static let identifier = "com.cooperhull.neoclub.downloads"
+        static let identifier = "dev.cobre.aioclub.downloads"
         weak var store: DownloadStore?
         let directory: URL
         var eventsDone: (() -> Void)?
