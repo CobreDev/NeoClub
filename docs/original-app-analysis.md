@@ -95,3 +95,25 @@ Dead ends:
 Jacoby ICG Black and Univers are commercial fonts copied from the official app's bundle for this personal, locally signed build.
 They're not licensed for redistribution: don't ship NeoClub publicly (App Store/TestFlight/GitHub releases) with these files
 without buying licenses or swapping in licensed alternatives.
+
+## Apple Music's Now Playing presentation (traced 2026-11-12, iOS 27.2, vphone)
+
+Frida trace of Music during a flick close (observation only):
+
+- `Music.NowPlayingViewController` is presented (modal style 2) with `transitioningDelegate = Music.PalettePresentationInteraction`.
+  Its animation controller for both directions is `Music.PalettePresentationAnimationController`, a subclass of UIKit's
+  private `_UISheetAnimationController`; the dismissal runs through `_UIZoomTransitionController` (UIKit's zoom transition).
+- The tab bar accessory is `_UITabAccessoryContainer` › `BottomAccessoryContainerView` › Music's bottom player view. During the
+  transition that bottom player view is moved into the card (`UIDropShadowView` › `_UIDropShadowClippingView`), so the card
+  lands as the real bar.
+- The bar's Liquid Glass (`UISDFBackdropView` in `_UIMaterialDefinitionView`) is matched to the card with
+  `CAMatchPropertyAnimation`/`CAMatchMoveAnimation` (match-bounds, -position, -corner-radius, -mesh, -hidden): one glass
+  layer that follows the card. Its glass filter animates in as the card becomes the bar (e.g.
+  `glassBackground.inputOuterRefractionAmount` 0→16, `inputRefractionOpacity` 0→0.6, `inputBlurOpacity0` 0.4→0).
+- Springs: card frame/position/size on mass 1, stiffness 333.33, damping 36.51 (ζ 1, response 0.344 s); the landing
+  (corner radii, glass filters, shadow) on damping 29.21 (ζ 0.8) with the flick's velocity (7.3); content fades on
+  mass 3, stiffness 500, damping 1000.
+
+NeoClub uses the public equivalent: `.fullScreenCover` with `.navigationTransition(.zoom(...))` from a
+`matchedTransitionSource` on the mini player, which gets the same zoom controller and Liquid Glass morph. Not reproducible
+publicly: Music's subclass keeps the card full width while dragged (the system zoom scales it down with the drag).

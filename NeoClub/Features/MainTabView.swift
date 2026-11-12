@@ -16,6 +16,10 @@ struct MainTabView: View {
     /// moves the app to the inner screen).
     @SceneStorage("sceneState") private var storedScene: Data?
     @State private var restored = false
+    /// The mini player is the zoom transition's source for Now Playing.
+    @Namespace private var nowPlayingZoom
+    /// Debug switch: the system zoom transition (how Apple Music presents Now Playing) vs the hand-built card.
+    @AppStorage(NowPlayingPresentation.nativeKey) private var nativePresentation = true
 
     private func path(_ id: TabID) -> Binding<[Route]> {
         Binding(get: { paths[id] ?? [] }, set: { paths[id] = $0 })
@@ -42,8 +46,15 @@ struct MainTabView: View {
 
     var body: some View {
         tabs
-            // Now Playing card (Apple Music-style slide-then-collapse into the mini player).
-            .overlay { PlayerCardHost() }
+            // Now Playing. Apple Music presents it with UIKit's zoom transition from the tab bar accessory (traced:
+            // its PalettePresentationAnimationController runs on _UIZoomTransitionController, and the accessory's
+            // Liquid Glass is matched to the card as it lands), so the native version is the same mechanism.
+            .overlay { if !nativePresentation { PlayerCardHost() } }
+            .fullScreenCover(isPresented: nativePresentation ? Binding(
+                get: { player.showNowPlaying }, set: { player.showNowPlaying = $0 }) : .constant(false)) {
+                NowPlayingPresentation()
+                    .navigationTransition(.zoom(sourceID: NowPlayingPresentation.sourceID, in: nowPlayingZoom))
+            }
             // The mini player is always there: bring back whatever was playing last (paused).
             .task {
                 player.restoreLastSession()
@@ -120,7 +131,7 @@ struct MainTabView: View {
         .tabViewStyle(.sidebarAdaptable)
         .tabBarMinimizeBehavior(.onScrollDown)
         .tabViewBottomAccessory(isEnabled: player.hasItem) {
-            MiniPlayer()
+            MiniPlayer(zoomNamespace: nativePresentation ? nowPlayingZoom : nil)
         }
         .alert("Bookmark", isPresented: Binding(
             get: { bookmarks.actionError != nil },
@@ -144,6 +155,8 @@ struct MiniPlayer: View {
     @Environment(AudioPlayer.self) private var player
     /// The copy drawn on the Now Playing card as it lands; the real one measures itself and hides meanwhile.
     var isCardFace = false
+    /// When set, the bar is the source of Now Playing's zoom transition.
+    var zoomNamespace: Namespace.ID? = nil
     @State private var card = PlayerCardModel.shared
     @Environment(\.tabViewBottomAccessoryPlacement) private var placement
 
@@ -172,6 +185,7 @@ struct MiniPlayer: View {
         }
         // The card stands in for the mini player while it's open or animating.
         .opacity(!isCardFace && card.visible ? 0 : 1)
+        .modifier(ZoomSource(namespace: zoomNamespace))
     }
 
     /// Artwork, title and album/collection.
@@ -242,5 +256,32 @@ struct MiniPlayer: View {
                 .accessibilityLabel("More")
             }
         }
+    }
+}
+
+/// Marks the mini player as Now Playing's zoom transition source (native presentation only).
+private struct ZoomSource: ViewModifier {
+    let namespace: Namespace.ID?
+    func body(content: Content) -> some View {
+        if let namespace {
+            content.matchedTransitionSource(id: NowPlayingPresentation.sourceID, in: namespace)
+        } else {
+            content
+        }
+    }
+}
+
+/// Now Playing as a full-screen presentation (the system zoom transition draws the card, its springs, the drag to
+/// dismiss and the landing in the bar). Laid out edge to edge with the screen's insets passed in, as on the card.
+struct NowPlayingPresentation: View {
+    static let nativeKey = "nativeNowPlayingTransition"
+    static let sourceID = "miniPlayer"
+
+    var body: some View {
+        GeometryReader { geo in
+            NowPlayingView(drawsBackground: true, insets: geo.safeAreaInsets)
+                .padding(geo.safeAreaInsets)
+        }
+        .ignoresSafeArea()
     }
 }

@@ -148,6 +148,19 @@ final class AudioPlayer {
         }
     }
 
+    #if DEBUG
+    /// `-debugUIOnly`: Whit's Flop's title and cover in the mini player, nothing loaded or playable.
+    func debugLoadPlaceholder() {
+        let json: [String: Any] = ["id": "placeholder", "name": "#001: Whit's Flop", "album_name": "#01: The Adventure Begins",
+                                   "episode_number": "001", "media_length": 1_301_240,
+                                   "thumbnail_large": "https://d23sy43gbewnpt.cloudfront.net/public/images/content/1_-_whits_flop.png"]
+        guard let data = try? JSONSerialization.data(withJSONObject: json),
+              let stub = try? JSONDecoder().decode(Episode.self, from: data) else { return }
+        episode = stub
+        duration = 1301.24
+    }
+    #endif
+
     private var pendingRestore: (episode: Episode, groupingID: String?)?
     private var restoreTask: Task<Void, Never>?
 
