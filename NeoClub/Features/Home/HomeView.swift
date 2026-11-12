@@ -65,7 +65,9 @@ struct HomeView: View {
             home = try await AIOService.home()
             error = nil
             let continuing = home?.playlists?.first { $0.name?.hasPrefix("Continue where you left off") == true }
-            await nextUp.refresh(continuing: continuing?.contentList ?? [], history: player.history.map(\.id))
+            await nextUp.refresh(continuing: continuing?.contentList ?? [], history: player.history.map { ($0.id, $0.playedAt) }) {
+                player.progress(for: $0)?.isComplete ?? false
+            }
         } catch {
             self.error = error.localizedDescription
         }
@@ -230,41 +232,78 @@ private struct BookmarksShelf: View {
     }
 }
 
-/// "Next Up": the next unplayed episode after each one you're in the middle of or played recently, in album order.
-/// Reads the album track list that comes with each episode's details (with this profile's progress on every track).
+/// "Next Up": for each episode you're in the middle of or played recently, the next episode in broadcast order
+/// (episode number, across albums, skipping bonus tracks) that you haven't finished or started.
+///
+/// Progress comes from the album list (which carries this profile's real progress; the track list inside episode
+/// details doesn't) plus episodes finished in this app on this device.
 @MainActor
 @Observable
 final class NextUpStore {
     static let shared = NextUpStore()
     private(set) var episodes: [Episode] = []
+    /// Every numbered episode in every album, in broadcast order. Loaded once per launch.
+    private var catalog: [Episode] = []
     private var lastSeeds: [String] = []
 
-    func refresh(continuing: [Episode], history: [String]) async {
-        // Most recent first: what's in progress on the account, then what was played here.
+    func refresh(continuing: [Episode], history: [(id: String, at: Date)], isDone: (Episode) -> Bool) async {
+        if catalog.isEmpty { catalog = await Self.loadCatalog() }
+        guard !catalog.isEmpty else { return }
+        // The most recent listens, from the account (album progress timestamps) and from this app (its history),
+        // newest first.
+        let iso = ISO8601DateFormatter()
+        iso.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        var recent: [(id: String, at: Date)] = history.prefix(10).map { $0 }
+        for e in catalog {
+            if let s = e.progress?.activityAt, let d = iso.date(from: s) ?? ISO8601DateFormatter().date(from: s) {
+                recent.append((e.id, d))
+            }
+        }
+        recent.sort { $0.at > $1.at }
         var seeds: [String] = []
-        for id in continuing.map(\.id) + history where !seeds.contains(id) { seeds.append(id) }
-        seeds = Array(seeds.prefix(5))
-        guard seeds != lastSeeds || episodes.isEmpty else { return }
+        for r in recent where !seeds.contains(r.id) {
+            seeds.append(r.id)
+            if seeds.count == 6 { break }
+        }
         lastSeeds = seeds
 
-        let details = await withTaskGroup(of: (Int, Episode?).self) { group in
-            for (i, id) in seeds.enumerated() {
-                group.addTask { (i, try? await AIOService.episode(id)) }
-            }
-            var out: [(Int, Episode?)] = []
-            for await r in group { out.append(r) }
-            return out.sorted { $0.0 < $1.0 }.compactMap(\.1)
-        }
         let inProgress = Set(continuing.map(\.id))
         var next: [Episode] = []
-        for detail in details {
-            guard let album = detail.inAlbum, let i = album.firstIndex(where: { $0.id == detail.id }) else { continue }
-            let candidate = album.dropFirst(i + 1).first { e in
-                !(e.progress?.isComplete ?? false) && !(e.progress?.isInProgress ?? false) && !inProgress.contains(e.id)
+        for seed in seeds {
+            guard let i = catalog.firstIndex(where: { $0.id == seed }) else { continue }
+            let candidate = catalog[(i + 1)...].first { e in
+                !inProgress.contains(e.id) && !isDone(e) && !(e.progress?.isInProgress ?? false)
             }
             if let candidate, !next.contains(where: { $0.id == candidate.id }) { next.append(candidate) }
         }
         episodes = next
+    }
+
+    /// All album pages (the same requests the Albums grid makes), flattened into broadcast order.
+    private static func loadCatalog() async -> [Episode] {
+        var all: [Episode] = []
+        var page = 1, pages = 1
+        repeat {
+            guard let r = try? await AIOService.groupings(type: "Album", page: page, pageSize: 25) else { break }
+            for g in r.contentGroupings ?? [] { all += g.contentList }
+            pages = r.metadata?.totalPageCount ?? page
+            page += 1
+        } while page <= pages && page <= 10
+        var seen = Set<String>()
+        return all
+            .filter { seen.insert($0.id).inserted }
+            .compactMap { e -> (Int, Episode)? in
+                // Plain numbers only: "1041" yes, "1041a"/"572b" (bonus tracks) no. Album lists leave
+                // episode_number empty, so fall back to the "#1041: Title" prefix.
+                let raw = e.episodeNumber?.trimmingCharacters(in: .whitespaces) ?? ""
+                if let n = Int(raw) { return (n, e) }
+                guard raw.isEmpty, let name = e.shortName, name.hasPrefix("#"),
+                      let colon = name.firstIndex(of: ":"),
+                      let n = Int(name[name.index(after: name.startIndex)..<colon]) else { return nil }
+                return (n, e)
+            }
+            .sorted { $0.0 < $1.0 }
+            .map(\.1)
     }
 }
 

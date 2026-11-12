@@ -45,7 +45,12 @@ struct ListenProgress: Codable, Hashable {
     var isComplete: Bool { status == "Complete" }
     var isInProgress: Bool { status == "In Progress" && (currentProgress ?? 0) > 0 }
 
-    enum CodingKeys: String, CodingKey { case status, currentProgress = "current_progress" }
+    /// When this profile last listened (ISO 8601), on list items that include it.
+    var activityAt: String? = nil
+
+    enum CodingKeys: String, CodingKey {
+        case status, currentProgress = "current_progress", activityAt = "content_activity_time_stamp"
+    }
 
     init(status: String?, currentProgress: Int?) {
         self.status = status
@@ -56,6 +61,7 @@ struct ListenProgress: Codable, Hashable {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         status = try? c.decodeIfPresent(String.self, forKey: .status)
         currentProgress = c.lenientInt(.currentProgress)
+        activityAt = try? c.decodeIfPresent(String.self, forKey: .activityAt)
     }
 }
 

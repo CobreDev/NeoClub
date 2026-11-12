@@ -129,13 +129,28 @@ final class AudioPlayer {
     var progressFraction: Double { duration > 0 ? position / duration : 0 }
 
     func progress(for item: Episode) -> ListenProgress? {
-        progressOverrides[item.id] ?? item.progress
+        if let override = progressOverrides[item.id] { return override }
+        if finishedHere.contains(item.id), !(item.progress?.isComplete ?? false) {
+            return ListenProgress(status: "Complete", currentProgress: item.mediaLength)
+        }
+        return item.progress
+    }
+
+    /// Episodes finished in this app on this device, remembered across launches. They count as played everywhere
+    /// in the app even when progress sync is off (debug builds), so the account never has to hear about them.
+    private(set) var finishedHere: Set<String> = Set(UserDefaults.standard.stringArray(forKey: "finishedHere") ?? [])
+
+    private func rememberFinished(_ id: String) {
+        guard !finishedHere.contains(id) else { return }
+        finishedHere.insert(id)
+        UserDefaults.standard.set(Array(finishedHere), forKey: "finishedHere")
     }
 
     /// Marks an episode finished, like the official app's "Mark as Complete": the same progress update playback
     /// sends at the end (status Complete at the full length). Only syncs when progress sync is on.
     func markPlayed(_ item: Episode) {
         let length = item.mediaLength ?? 0
+        rememberFinished(item.id)
         progressOverrides[item.id] = ListenProgress(status: "Complete", currentProgress: length)
         guard ProgressSync.isEnabled else { return }
         Task {
@@ -330,6 +345,7 @@ final class AudioPlayer {
     private func didFinish() {
         guard let episode else { return }
         position = duration
+        rememberFinished(episode.id)
         sync.report(positionMs: Int(duration * 1000), finished: true) { [weak self] p in self?.progressOverrides[episode.id] = p }
         isPlaying = false
         if sleepTimer == .endOfEpisode {
@@ -341,6 +357,8 @@ final class AudioPlayer {
     private func reportProgress() {
         guard let episode else { return }
         let ms = Int(position * 1000)
+        // Within the last 30 seconds counts as finished (the same rule progress sync uses).
+        if duration > 60, position >= duration - 30 { rememberFinished(episode.id) }
         sync.report(positionMs: ms, finished: false) { [weak self] p in self?.progressOverrides[episode.id] = p }
     }
 
