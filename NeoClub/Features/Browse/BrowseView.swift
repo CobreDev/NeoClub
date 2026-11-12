@@ -52,7 +52,7 @@ struct BrowseView: View {
                                                 .lineLimit(2, reservesSpace: true)
                                                 .multilineTextAlignment(.leading)
                                         }
-                                        .frame(width: 150)
+                                        .shelfItem()
                                     }
                                     .buttonStyle(.plain)
                                 }
@@ -67,7 +67,7 @@ struct BrowseView: View {
 
                 VStack(alignment: .leading, spacing: 12) {
                     Text("Categories").font(.jacoby(24)).padding(.horizontal, 20)
-                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 160), spacing: 14)], spacing: 14) {
+                    AdaptiveGrid(rowSpacing: 14) {
                         ForEach(Self.categories) { c in
                             NavigationLink(value: Route.groupingList(type: c.type, title: c.title, filter: c.filter)) {
                                 CategoryCard(category: c, covers: store.covers[c.id] ?? [])
@@ -88,7 +88,7 @@ struct BrowseView: View {
 
 /// A colorful category card: gradient with covers fanned across it, and the title in the top-left corner over a blur
 /// that fades out toward the opposite corner (just enough to keep the title readable).
-private struct CategoryCard: View {
+struct CategoryCard: View {
     let category: BrowseView.Category
     let covers: [URL]
     /// The title's size, so the blur covers all of it.
@@ -193,7 +193,7 @@ struct GroupingGridView: View {
 
     var body: some View {
         ScrollView {
-            LazyVGrid(columns: [GridItem(.adaptive(minimum: 150), spacing: 16)], spacing: 22) {
+            AdaptiveGrid(spacing: 16, rowSpacing: 22) {
                 ForEach(groupings) { g in
                     NavigationLink(value: Route.grouping(id: g.groupingID ?? "", preview: g)) {
                         VStack(alignment: .leading, spacing: 6) {

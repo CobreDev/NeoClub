@@ -5,8 +5,34 @@ struct SearchView: View {
     @State private var hits: [SearchHit] = []
     @State private var searching = false
     @State private var error: String?
+    /// Recent searches that found something, newest first (kept on this device).
+    @AppStorage("recentSearches") private var recentData = Data()
+    @State private var browse = BrowseStore.shared
+
+    private var recent: [String] { (try? JSONDecoder().decode([String].self, from: recentData)) ?? [] }
+
+    private func remember(_ term: String) {
+        var list = recent.filter { $0.caseInsensitiveCompare(term) != .orderedSame }
+        list.insert(term, at: 0)
+        recentData = (try? JSONEncoder().encode(Array(list.prefix(8)))) ?? Data()
+    }
 
     var body: some View {
+        Group {
+            if query.isEmpty {
+                ScrollView { emptyState.padding(.horizontal, 20).padding(.vertical, 12) }
+            } else {
+                results
+            }
+        }
+        .aioBackground()
+        .task { await browse.load() }
+        .navigationTitle("Search")
+        .searchable(text: $query, prompt: "Episodes, albums, characters, cast")
+        .task(id: query) { await search() }
+    }
+
+    private var results: some View {
         List {
             if hits.isEmpty && !searching && !query.isEmpty && error == nil {
                 ContentUnavailableView.search(text: query)
@@ -52,9 +78,10 @@ struct SearchView: View {
         }
         .overlay { if searching && hits.isEmpty { ProgressView() } }
         .aioBackground()
-        .navigationTitle("Search")
-        .searchable(text: $query, prompt: "Episodes, albums, characters, cast")
-        .task(id: query) {
+    }
+
+    private func search() async {
+        do {
             // iOS smart punctuation turns ' into ’, which the AIO search doesn't match.
             let term = query.trimmingCharacters(in: .whitespaces)
                 .replacingOccurrences(of: "\u{2019}", with: "'").replacingOccurrences(of: "\u{2018}", with: "'")
@@ -68,8 +95,52 @@ struct SearchView: View {
             do {
                 hits = try await AIOService.search(term)
                 error = nil
+                if !hits.isEmpty { remember(term) }
             } catch {
                 if !Task.isCancelled { self.error = error.localizedDescription }
+            }
+        }
+    }
+
+    /// Before typing, like Apple Music: Recently Searched, then Browse Categories.
+    private var emptyState: some View {
+        VStack(alignment: .leading, spacing: 28) {
+            if !recent.isEmpty {
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack {
+                        Text("Recently Searched").font(.universBold(22, relativeTo: .title2))
+                        Spacer()
+                        Button("Clear") { recentData = Data() }
+                            .font(.univers(16, relativeTo: .body))
+                            .foregroundStyle(Color.aioTint)
+                    }
+                    AdaptiveGrid(rowSpacing: 10) {
+                        ForEach(recent, id: \.self) { term in
+                            Button { query = term } label: {
+                                Label(term, systemImage: "magnifyingglass")
+                                    .font(.univers(16, relativeTo: .body))
+                                    .lineLimit(1)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .padding(.horizontal, 16)
+                                    .frame(height: 48)
+                                    .background(.white.opacity(0.14), in: .rect(cornerRadius: 14))
+                                    .contentShape(.rect(cornerRadius: 14))
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                }
+            }
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Browse Categories").font(.universBold(22, relativeTo: .title2))
+                AdaptiveGrid(rowSpacing: 14) {
+                    ForEach(BrowseView.categories) { c in
+                        NavigationLink(value: Route.groupingList(type: c.type, title: c.title, filter: c.filter)) {
+                            CategoryCard(category: c, covers: browse.covers[c.id] ?? [])
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
             }
         }
     }

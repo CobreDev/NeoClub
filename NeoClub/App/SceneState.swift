@@ -3,7 +3,7 @@ import Foundation
 /// A navigation destination reduced to what's needed to rebuild it, so the app's place (tab, pages, Now Playing)
 /// survives the window being recreated, e.g. when the iPhone Duo is unfolded and the app moves to the inner screen.
 struct StoredRoute: Codable {
-    enum Kind: String, Codable { case episode, grouping, groupingList, character, author, bookmarks }
+    enum Kind: String, Codable { case episode, grouping, groupingList, character, author, bookmarks, downloads }
     var kind: Kind
     var id: String?
     var title: String?
@@ -24,6 +24,7 @@ struct StoredRoute: Codable {
         case .character(let id, _): self.init(kind: .character, id: id)
         case .author(let id, _): self.init(kind: .author, id: id)
         case .bookmarks: self.init(kind: .bookmarks)
+        case .downloads: self.init(kind: .downloads)
         }
     }
 
@@ -49,6 +50,7 @@ struct StoredRoute: Codable {
         case .character: return id.map { .character(id: $0, preview: nil) }
         case .author: return id.map { .author(id: $0, preview: nil) }
         case .bookmarks: return .bookmarks
+        case .downloads: return .downloads
         }
     }
 }

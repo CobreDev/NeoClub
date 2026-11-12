@@ -103,7 +103,8 @@ private struct Shelf: View {
                 LazyHStack(alignment: .top, spacing: 14) {
                     ForEach(shelf.contentList) { episode in
                         NavigationLink(value: Route.episode(episode, groupingID: shelf.groupingID)) {
-                            EpisodeCard(episode: episode, width: isContinue ? 200 : 150)
+                            EpisodeCard(episode: episode)
+                                .shelfItem(large: isContinue)
                         }
                         .buttonStyle(.plain)
                         .episodeContextMenu(episode, queue: queue(after: episode), groupingID: shelf.groupingID)
@@ -214,7 +215,8 @@ private struct BookmarksShelf: View {
                     LazyHStack(alignment: .top, spacing: 14) {
                         ForEach(bookmarks.items) { episode in
                             NavigationLink(value: Route.episode(episode, groupingID: nil)) {
-                                EpisodeCard(episode: episode, width: 150)
+                                EpisodeCard(episode: episode)
+                                    .shelfItem()
                             }
                             .buttonStyle(.plain)
                             .episodeContextMenu(episode)
@@ -318,7 +320,8 @@ private struct NextUpShelf: View {
                     LazyHStack(alignment: .top, spacing: 14) {
                         ForEach(items) { episode in
                             NavigationLink(value: Route.episode(episode, groupingID: nil)) {
-                                EpisodeCard(episode: episode, width: 150)
+                                EpisodeCard(episode: episode)
+                                    .shelfItem()
                             }
                             .buttonStyle(.plain)
                             .episodeContextMenu(episode)

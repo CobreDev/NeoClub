@@ -134,31 +134,13 @@ struct MiniPlayer: View {
     @State private var card = PlayerCardModel.shared
     @Environment(\.tabViewBottomAccessoryPlacement) private var placement
 
+    /// The bar's own width: wide (the iPhone Duo unfolded in landscape) gets Apple Music's full control bar.
+    @State private var width: CGFloat = 0
+    private var isWide: Bool { width >= 640 }
+
     var body: some View {
-        HStack(spacing: 12) {
-            Artwork(url: player.episode?.smallArtworkURL, cornerRadius: 6)
-                .frame(width: 32, height: 32)
-            VStack(alignment: .leading, spacing: 0) {
-                Text(player.episode?.title ?? "")
-                    .font(.universBold(14, relativeTo: .subheadline))
-                    .lineLimit(1)
-                if placement != .inline, let album = player.episode?.albumTitle {
-                    Text(album).font(.univers(12, relativeTo: .caption)).foregroundStyle(.secondary).lineLimit(1)
-                }
-            }
-            Spacer(minLength: 4)
-            if player.isLoading {
-                ProgressView().controlSize(.small)
-            } else {
-                Button { player.togglePlayPause() } label: {
-                    Image(systemName: player.isPlaying ? "pause.fill" : "play.fill").font(.title3)
-                }
-                .accessibilityLabel(player.isPlaying ? "Pause" : "Play")
-            }
-            if placement != .inline {
-                Button { player.skip(by: 30) } label: { Image(systemName: "goforward.30").font(.title3) }
-                    .accessibilityLabel("Skip forward 30 seconds")
-            }
+        Group {
+            if isWide { wideBar } else { compactBar }
         }
         .buttonStyle(.plain)
         .padding(.horizontal, 14)
@@ -174,8 +156,79 @@ struct MiniPlayer: View {
             })
         .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { frame in
             if !isCardFace { card.miniFrame = frame }
+            width = frame.width
         }
         // The card stands in for the mini player while it's open or animating.
         .opacity(!isCardFace && card.visible ? 0 : 1)
+    }
+
+    /// Artwork, title and album/collection.
+    private var nowPlaying: some View {
+        HStack(spacing: 12) {
+            Artwork(url: player.episode?.smallArtworkURL, cornerRadius: 6)
+                .frame(width: 32, height: 32)
+            VStack(alignment: .leading, spacing: 0) {
+                Text(player.episode?.title ?? "")
+                    .font(.universBold(14, relativeTo: .subheadline))
+                    .lineLimit(1)
+                if placement != .inline, let album = player.episode?.albumTitle {
+                    Text(album).font(.univers(12, relativeTo: .caption)).foregroundStyle(.secondary).lineLimit(1)
+                }
+            }
+        }
+    }
+
+    @ViewBuilder private var playPause: some View {
+        if player.isLoading {
+            ProgressView().controlSize(.small)
+        } else {
+            Button { player.togglePlayPause() } label: {
+                Image(systemName: player.isPlaying ? "pause.fill" : "play.fill").font(.title3)
+                    .contentTransition(.symbolEffect(.replace))
+            }
+            .accessibilityLabel(player.isPlaying ? "Pause" : "Play")
+        }
+    }
+
+    /// Phone-width bar: what's playing, then play/pause and skip forward (like Apple Music's mini player).
+    private var compactBar: some View {
+        HStack(spacing: 12) {
+            nowPlaying
+            Spacer(minLength: 4)
+            playPause
+            if placement != .inline {
+                Button { player.skip(by: 30) } label: { Image(systemName: "goforward.30").font(.title3) }
+                    .accessibilityLabel("Skip forward 30 seconds")
+            }
+        }
+    }
+
+    /// Wide bar, laid out like Apple Music's on a wide screen: transport controls, what's playing, then more.
+    private var wideBar: some View {
+        HStack(spacing: 22) {
+            Button { player.skip(by: -15) } label: { Image(systemName: "gobackward.15").font(.title3) }
+                .accessibilityLabel("Skip back 15 seconds")
+            playPause.font(.title2)
+            Button { player.skip(by: 30) } label: { Image(systemName: "goforward.30").font(.title3) }
+                .accessibilityLabel("Skip forward 30 seconds")
+            nowPlaying.padding(.leading, 8)
+            Spacer(minLength: 8)
+            if let episode = player.episode {
+                Menu {
+                    Button("Go to Episode", systemImage: "info.circle") {
+                        player.navigationRequest = .episode(episode, groupingID: player.groupingID)
+                    }
+                    if player.progress(for: episode)?.isComplete == true {
+                        Button("Mark as Unplayed", systemImage: "arrow.uturn.backward.circle") { player.markUnplayed(episode) }
+                    } else {
+                        Button("Mark as Played", systemImage: "checkmark.circle") { player.markPlayed(episode) }
+                    }
+                    ShareLink(item: episode.shareURL) { Label("Share Episode", systemImage: "square.and.arrow.up") }
+                } label: {
+                    Image(systemName: "ellipsis").font(.title3).frame(width: 32, height: 32).contentShape(.rect)
+                }
+                .accessibilityLabel("More")
+            }
+        }
     }
 }

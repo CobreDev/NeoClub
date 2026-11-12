@@ -58,6 +58,15 @@ final class AudioPlayer {
         var playedAt: Date
 
         static let key = "playHistory"
+
+        /// A stand-in episode (pages and playback load the full details).
+        var episodeStub: Episode? {
+            var json: [String: Any] = ["id": id, "name": title]
+            if let album { json["album_name"] = album }
+            if let artwork { json["thumbnail_medium"] = artwork; json["thumbnail_small"] = artwork }
+            guard let data = try? JSONSerialization.data(withJSONObject: json) else { return nil }
+            return try? JSONDecoder().decode(Episode.self, from: data)
+        }
         static func load() -> [HistoryEntry] {
             guard let d = UserDefaults.standard.data(forKey: key) else { return [] }
             return (try? JSONDecoder().decode([HistoryEntry].self, from: d)) ?? []
@@ -229,9 +238,7 @@ final class AudioPlayer {
 
     /// Replays something from History (its album context isn't kept, so nothing is queued after it).
     func playFromHistory(_ entry: HistoryEntry) {
-        let json = try? JSONSerialization.data(withJSONObject: ["id": entry.id, "name": entry.title,
-                                                                "thumbnail_medium": entry.artwork ?? ""])
-        guard let json, let stub = try? JSONDecoder().decode(Episode.self, from: json) else { return }
+        guard let stub = entry.episodeStub else { return }
         play(stub)
     }
 

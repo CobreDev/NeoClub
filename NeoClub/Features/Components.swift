@@ -9,6 +9,7 @@ enum Route: Hashable {
     case character(id: String, preview: CastMember?)
     case author(id: String, preview: Author?)
     case bookmarks
+    case downloads
 }
 
 extension View {
@@ -21,6 +22,7 @@ extension View {
             case .character(let id, let preview): CharacterView(characterID: id, preview: preview)
             case .author(let id, let preview): AuthorView(authorID: id, preview: preview)
             case .bookmarks: BookmarksView()
+            case .downloads: DownloadsView()
             }
         }
     }
@@ -85,7 +87,8 @@ struct ProgressIndicator: View {
 struct EpisodeCard: View {
     @Environment(AudioPlayer.self) private var player
     let episode: Episode
-    var width: CGFloat = 160
+    /// Fixed width, or nil to fill the width it's given (shelves size it with `shelfItem()`).
+    var width: CGFloat? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -103,8 +106,8 @@ struct EpisodeCard: View {
                 }
             Text(episode.title)
                 .font(.univers(14, relativeTo: .subheadline))
-                .lineLimit(2)
-                .frame(width: width, alignment: .leading)
+                .lineLimit(2, reservesSpace: true)
+                .frame(maxWidth: width ?? .infinity, alignment: .leading)
             Group {
                 if let p = player.progress(for: episode), p.isInProgress || p.isComplete {
                     ProgressIndicator(progress: p, durationMs: episode.mediaLength)
@@ -114,8 +117,39 @@ struct EpisodeCard: View {
                         .foregroundStyle(.secondary)
                 }
             }
-            .frame(width: width, alignment: .leading)
+            .frame(maxWidth: width ?? .infinity, alignment: .leading)
         }
+    }
+}
+
+extension View {
+    /// Apple Music's shelf sizing: items scale with the screen so about 2½ show on a phone-width screen, 3½ on the
+    /// iPhone Duo unfolded in portrait and 4½ in landscape (one fewer for the larger "Continue Listening" cards),
+    /// with the next item peeking in. Assumes 20 pt margins and 14 pt spacing.
+    func shelfItem(large: Bool = false) -> some View {
+        containerRelativeFrame(.horizontal) { width, _ in
+            var count: CGFloat = width < 520 ? 2 : width < 760 ? 3 : 4
+            if large { count = max(1.5, count - 0.5) }
+            return (width - 20 - 14 * count) / (count + 0.5)
+        }
+    }
+}
+
+/// Apple Music's grids: 2 columns on a phone-width screen, 3 on the iPhone Duo unfolded in portrait, 4 in
+/// landscape, decided by the width the grid actually has.
+struct AdaptiveGrid<Content: View>: View {
+    var spacing: CGFloat = 14
+    var rowSpacing: CGFloat = 20
+    @ViewBuilder var content: Content
+    @State private var width: CGFloat = 0
+
+    var body: some View {
+        let count = width < 520 ? 2 : width < 760 ? 3 : 4
+        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: spacing, alignment: .top), count: count),
+                  alignment: .leading, spacing: rowSpacing) {
+            content
+        }
+        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
     }
 }
 
