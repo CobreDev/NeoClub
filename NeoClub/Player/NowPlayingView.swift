@@ -246,13 +246,12 @@ struct NowPlayingView: View {
 
     private func titles(size: CGFloat) -> some View {
         VStack(alignment: .leading, spacing: -2) {
-            Text(player.episode?.title ?? "")
-                .font(.universBold(size, relativeTo: .title3))
-                .lineLimit(1)
-            Text(player.episode?.albumTitle ?? "Adventures in Odyssey")
-                .font(.univers(size, relativeTo: .title3))
+            // Long titles scroll to show the whole thing, like Apple Music.
+            MarqueeText(text: player.episode?.title ?? "", font: .universBold(size, relativeTo: .title3),
+                        restartKey: PlayerCardModel.shared.visible)
+            MarqueeText(text: player.episode?.albumTitle ?? "Adventures in Odyssey",
+                        font: .univers(size, relativeTo: .title3), restartKey: PlayerCardModel.shared.visible)
                 .opacity(0.6)
-                .lineLimit(1)
         }
         .matchedGeometryEffect(id: "titles", in: ns)
     }

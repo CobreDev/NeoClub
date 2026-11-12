@@ -96,6 +96,7 @@ private struct Shelf: View {
                     .padding(.horizontal, 20)
                 }
                 .buttonStyle(.plain)
+                .groupingContextMenu(id: gid, grouping: shelf)
             } else {
                 ShelfHeader(title: displayTitle)
             }

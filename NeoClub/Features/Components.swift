@@ -304,3 +304,123 @@ extension View {
         modifier(EpisodeContextMenu(episode: episode, queue: queue, groupingID: groupingID, extra: extra()))
     }
 }
+
+/// One line of text that scrolls when it doesn't fit, like Apple Music's Now Playing titles: it rests for a few
+/// seconds, glides left at a steady pace until a second copy has taken the first one's place, and repeats. Text
+/// that fits just sits still.
+struct MarqueeText: View {
+    let text: String
+    let font: Font
+    /// Gap between the end of the text and the start of the next copy.
+    var gap: CGFloat = 40
+    /// Scrolling speed, points per second.
+    var speed: CGFloat = 30
+    /// Changing this starts over from the beginning (e.g. each time Now Playing opens).
+    var restartKey: Bool = false
+    /// Seconds at rest before each pass.
+    var pause: Double = 3
+
+    @State private var fullWidth: CGFloat = 0
+    @State private var boxWidth: CGFloat = 0
+    /// When the current cycle began; the position is computed from it, so restarting is just a reset.
+    @State private var start = Date()
+
+    private var overflows: Bool { fullWidth > boxWidth + 0.5 }
+
+    var body: some View {
+        // The visible layout: one line at the available width (the scrolling copy is drawn over it).
+        Text(text).font(font).lineLimit(1)
+            .opacity(0)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { boxWidth = $0 }
+            .background(alignment: .leading) {
+                Text(text).font(font).fixedSize().hidden()
+                    .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { fullWidth = $0 }
+            }
+            .overlay(alignment: .leading) {
+                let distance = fullWidth + gap
+                HStack(spacing: gap) {
+                    Text(text).font(font).fixedSize()
+                    if overflows { Text(text).font(font).fixedSize() }
+                }
+                // Rest, glide one text-plus-gap left, repeat. A new identity starts it over from the beginning.
+                .keyframeAnimator(initialValue: CGFloat(0), repeating: overflows) { content, x in
+                    content.offset(x: overflows ? x : 0)
+                } keyframes: { _ in
+                    KeyframeTrack {
+                        LinearKeyframe(0, duration: pause)
+                        LinearKeyframe(-distance, duration: Double(max(distance, 1) / speed))
+                    }
+                }
+                .id(start)
+            }
+            .clipped()
+            .mask {
+                if overflows {
+                    HStack(spacing: 0) {
+                        LinearGradient(colors: [.clear, .black], startPoint: .leading, endPoint: .trailing).frame(width: 8)
+                        Color.black
+                        LinearGradient(colors: [.black, .clear], startPoint: .leading, endPoint: .trailing).frame(width: 16)
+                    }
+                } else {
+                    Color.black
+                }
+            }
+            .onChange(of: restartKey) { start = Date() }
+            .onChange(of: text) { start = Date() }
+            .accessibilityLabel(text)
+    }
+}
+
+extension Grouping {
+    /// The album/collection on the AIO Club website, for sharing.
+    var shareURL: URL? { groupingID.flatMap { URL(string: "https://app.adventuresinodyssey.com/contentGroup/\($0)") } }
+}
+
+/// Menu items for an album or collection: Play, Mark Album as Played/Unplayed, Share. Uses the episodes the
+/// grouping came with, or loads them when an action is chosen (search results arrive without them).
+struct GroupingActions: View {
+    @Environment(AudioPlayer.self) private var player
+    let id: String
+    let grouping: Grouping?
+
+    private var episodes: [Episode] { grouping?.contentList ?? [] }
+
+    var body: some View {
+        Button("Play", systemImage: "play.fill") {
+            withEpisodes { list in
+                guard let first = list.first else { return }
+                player.play(first, queue: Array(list.dropFirst()), groupingID: id)
+            }
+        }
+        let known = !episodes.isEmpty
+        let played = episodes.filter { player.progress(for: $0)?.isComplete ?? false }.count
+        if !known || played < episodes.count {
+            Button("Mark Album as Played", systemImage: "checkmark.circle") {
+                withEpisodes { player.markAll($0, played: true) }
+            }
+        }
+        if !known || played > 0 {
+            Button("Mark Album as Unplayed", systemImage: "arrow.uturn.backward.circle") {
+                withEpisodes { player.markAll($0, played: false) }
+            }
+        }
+        if let url = grouping?.shareURL ?? URL(string: "https://app.adventuresinodyssey.com/contentGroup/\(id)") {
+            ShareLink(item: url) { Label("Share Album", systemImage: "square.and.arrow.up") }
+        }
+    }
+
+    private func withEpisodes(_ action: @escaping @MainActor ([Episode]) -> Void) {
+        if !episodes.isEmpty { action(episodes); return }
+        Task {
+            if let list = try? await AIOService.grouping(id)?.contentList, !list.isEmpty { action(list) }
+        }
+    }
+}
+
+extension View {
+    /// Long-press menu for an album or collection.
+    func groupingContextMenu(id: String, grouping: Grouping?) -> some View {
+        contextMenu { GroupingActions(id: id, grouping: grouping) }
+    }
+}

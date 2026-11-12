@@ -36,6 +36,15 @@ struct GroupingView: View {
         .listStyle(.plain)
         .aioBackground(artworkURL: shown?.artworkURL)
         .navigationTitle(shown?.title ?? "")
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Menu {
+                    GroupingActions(id: groupingID, grouping: shown)
+                } label: {
+                    Label("More", systemImage: "ellipsis")
+                }
+            }
+        }
         .navigationBarTitleDisplayMode(.inline)
         .refreshable { await load() }
         .task { await load() }

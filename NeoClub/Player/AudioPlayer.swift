@@ -176,6 +176,38 @@ final class AudioPlayer {
 
     /// Marks an episode finished, like the official app's "Mark as Complete": the same progress update playback
     /// sends at the end (status Complete at the full length). Only syncs when progress sync is on.
+    /// Marks every episode of an album played or unplayed (Mark Album as Played/Unplayed). The app updates at once;
+    /// the account gets the same per-episode updates as Mark as Played/Unplayed, sent one at a time with a short
+    /// pause between them. Only syncs when progress sync is on.
+    func markAll(_ items: [Episode], played: Bool) {
+        let items = items.filter { (progress(for: $0)?.isComplete ?? false) != played }
+        guard !items.isEmpty else { return }
+        for item in items {
+            if played {
+                progressOverrides[item.id] = ListenProgress(status: "Complete", currentProgress: item.mediaLength ?? 0)
+                finishedHere.insert(item.id)
+            } else {
+                progressOverrides[item.id] = ListenProgress(status: "New", currentProgress: 0)
+                finishedHere.remove(item.id)
+            }
+        }
+        UserDefaults.standard.set(Array(finishedHere), forKey: "finishedHere")
+        guard ProgressSync.isEnabled else { return }
+        Task {
+            for item in items {
+                do {
+                    var length = item.mediaLength ?? 0
+                    if played && length == 0 { length = (try? await AIOService.episode(item.id))?.mediaLength ?? 0 }
+                    try await AIOService.saveProgress(episodeID: item.id, status: played ? "Complete" : "New",
+                                                      positionMs: played ? length : 0)
+                } catch {
+                    SignInLog.write("mark album failed for \(item.id): \(error.localizedDescription)")
+                }
+                try? await Task.sleep(for: .milliseconds(250))
+            }
+        }
+    }
+
     func markPlayed(_ item: Episode) {
         let length = item.mediaLength ?? 0
         rememberFinished(item.id)

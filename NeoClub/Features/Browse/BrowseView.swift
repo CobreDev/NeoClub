@@ -55,6 +55,7 @@ struct BrowseView: View {
                                         .shelfItem()
                                     }
                                     .buttonStyle(.plain)
+                                    .groupingContextMenu(id: g.groupingID ?? "", grouping: g)
                                 }
                             }
                             .scrollTargetLayout()
@@ -205,6 +206,7 @@ struct GroupingGridView: View {
                         }
                     }
                     .buttonStyle(.plain)
+                    .groupingContextMenu(id: g.groupingID ?? "", grouping: g)
                     .onAppear { if g.id == groupings.last?.id { Task { await loadMore() } } }
                 }
             }

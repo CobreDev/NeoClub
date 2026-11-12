@@ -43,6 +43,7 @@ struct SearchView: View {
                     ForEach(groups) { hit in
                         NavigationLink(value: Route.grouping(id: hit.id, preview: nil)) { HitRow(hit: hit) }
                             .aioRow()
+                            .groupingContextMenu(id: hit.id, grouping: nil)
                     }
                 }
             }
