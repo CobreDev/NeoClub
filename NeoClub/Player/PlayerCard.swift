@@ -4,7 +4,7 @@ import SwiftUI
 ///
 /// Every number here was measured from Apple Music (iOS 27.2) running in a virtual iPhone Duo, by tracing its
 /// UIKit/Core Animation calls during taps, drags and flicks:
-/// - **Open** (tap, or a quick upward flick on the mini player; there is no interactive drag-up): the card's frame
+/// - **Open** (tap, or a swipe up on the mini player; there is no interactive drag-up): the card's frame
 ///   goes from the mini player's frame to full screen on a critically damped spring, response 0.3441 s.
 ///   The flick's velocity is not carried over.
 /// - **Drag down**: the card follows the finger 1:1 (after touch slop) at full size; it does not narrow or scale.
@@ -42,40 +42,13 @@ final class PlayerCardModel {
     static func travelSpring(initialVelocity: CGFloat) -> Animation {
         .interpolatingSpring(mass: 1, stiffness: 333.3333, damping: 29.2119, initialVelocity: initialVelocity)
     }
-    /// Closing, the card takes the bar's shape on a quick critically damped spring (but never before it reaches
-    /// the bar), so it shrinks smoothly whether it arrives fast or was dragged most of the way there slowly.
-    static let landSpring = Animation.spring(response: 0.2, dampingFraction: 1.0)
+    /// Closing, the card takes the bar's shape on its own critically damped spring, started at release (but never
+    /// ahead of its travel), so even a fast flick shrinks into the bar over ~150 ms instead of snapping in a frame.
+    static let landSpring = Animation.spring(response: 0.35, dampingFraction: 1.0)
 
     /// How far the card is from full screen toward the bar (0…1).
     private var travel: CGFloat {
         min(1, max(0, (top - fullFrame.minY) / max(1, miniFrame.minY - fullFrame.minY)))
-    }
-
-    /// Dragging up from the mini player: the card comes up under the finger right away (Apple Music).
-    func dragOpen(up: CGFloat) {
-        var tx = Transaction(); tx.disablesAnimations = true
-        withTransaction(tx) {
-            if !visible || !closing {
-                generation += 1
-                if !visible { morph = 1; face = 1; visible = true }
-                closing = true
-            }
-            top = max(fullFrame.minY, miniFrame.minY - max(0, up))
-        }
-    }
-
-    /// Finger lifted after dragging up: open if it went far or fast enough (call `open` via `finish`), else
-    /// settle back into the bar.
-    func endOpenDrag(up: CGFloat, velocity: CGFloat, finish: () -> Void) {
-        guard visible, closing else { return }
-        if up > 60 || velocity > 300 {
-            // Hand over from the drag's shape to the opening spring without a jump.
-            var tx = Transaction(); tx.disablesAnimations = true
-            withTransaction(tx) { morph = min(1, pow(travel, 10)); closing = false }
-            finish()
-        } else {
-            close(velocity: 0)
-        }
     }
 
     func open() {
@@ -107,8 +80,9 @@ final class PlayerCardModel {
         let gen = generation
         closing = true
         let v = max(0, velocity)
-        // A card dragged down holds where the finger left it, then collapses.
-        let hold = top > fullFrame.minY + 1 && morph < 1 ? Self.releaseHold : 0
+        // A card let go slowly holds where the finger left it, then collapses; a flick carries straight on (a pause
+        // after a fast flick reads as a stutter).
+        let hold = top > fullFrame.minY + 1 && morph < 1 && v < 300 ? Self.releaseHold : 0
         DispatchQueue.main.asyncAfter(deadline: .now() + hold) { [weak self] in
             guard let self, self.generation == gen else { return }
             let remaining = max(1, self.miniFrame.minY - self.top)
@@ -161,7 +135,8 @@ struct CardGeometry: ViewModifier, Animatable {
         let width = full.width + (mini.width - full.width) * m
         let midX = full.midX + (mini.midX - full.midX) * m
         let height = full.height + (mini.height - full.height) * m
-        return CGRect(x: midX - width / 2, y: top, width: width, height: height)
+        // Never past the bar: a hard flick's spring would otherwise dip the card below it before settling.
+        return CGRect(x: midX - width / 2, y: min(top, mini.minY), width: width, height: height)
     }
 
     /// Cross-fade between the full player and the mini player's face, driven by how close the card is to the bar

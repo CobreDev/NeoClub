@@ -149,17 +149,12 @@ struct MiniPlayer: View {
         .padding(.horizontal, 14)
         .contentShape(.rect)
         .onTapGesture { player.showNowPlaying = true }
-        // Dragging up brings the Now Playing card up under the finger right away (Apple Music); letting go opens
-        // it if it went far or fast enough, otherwise it settles back into the bar.
+        // Swiping up opens Now Playing as soon as the swipe is clearly upward: the card animates open on its own,
+        // like a tap, rather than following the finger.
         .gesture(isCardFace ? nil : DragGesture(minimumDistance: 8, coordinateSpace: .global)
             .onChanged { v in
                 let up = -v.translation.height
-                if up > 0 { card.dragOpen(up: up) }
-            }
-            .onEnded { v in
-                card.endOpenDrag(up: -v.translation.height, velocity: -v.velocity.height) {
-                    player.showNowPlaying = true
-                }
+                if up > 12, up > abs(v.translation.width), !player.showNowPlaying { player.showNowPlaying = true }
             })
         .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { frame in
             if !isCardFace { card.miniFrame = frame }

@@ -223,7 +223,14 @@ struct NowPlayingView: View {
     private var bigArtwork: some View {
         artworkImage(cornerRadius: 10)
             .matchedGeometryEffect(id: "artwork", in: ns)
-            .shadow(color: .black.opacity(player.isPlaying ? 0.45 : 0.2), radius: player.isPlaying ? 28 : 10, y: 14)
+            // A fixed blur that only fades (cheap to animate) rather than a shadow whose radius changes every frame,
+            // which made the play/pause resize stutter.
+            .background {
+                RoundedRectangle(cornerRadius: 10, style: .continuous).fill(.black)
+                    .blur(radius: 22)
+                    .offset(y: 14)
+                    .opacity(player.isPlaying ? 0.5 : 0.25)
+            }
             // Paused, Apple Music shrinks the artwork to ~73%. Fitted from a 60 fps recording of Music on the Duo:
             // playing, it grows on a bouncy spring (~11% overshoot) a beat after the button's glyph swaps;
             // pausing, it shrinks on a nearly critically damped spring with no overshoot.
