@@ -2,9 +2,9 @@ import AVFoundation
 import Foundation
 import SwiftUI
 
-/// Offline episodes. Like the official app, saves the episode's signed `download_url` file (AAC in MP4).
-/// The file is read through AVFoundation, the same media stack that streams playback, and written
-/// to disk with a passthrough export (no re-encoding).
+/// Offline episodes. Saves the episode's signed `download_url` file (AAC in MP4) exactly the way the official app
+/// does: one plain GET with the same headers its HTTP client sends (traced from the official app on 2026-11-11),
+/// no cookies, no API token.
 @MainActor
 @Observable
 final class DownloadStore {
@@ -93,7 +93,7 @@ final class DownloadStore {
             try? FileManager.default.removeItem(at: dest)
 
             let id = episode.id
-            try await Self.copyAudio(from: AVURLAsset(url: remote), to: dest) { fraction in
+            try await Self.fetchFile(from: remote, to: dest) { fraction in
                 Task { @MainActor [weak self] in self?.active[id] = fraction }
             }
             try Task.checkCancellation()
@@ -113,53 +113,39 @@ final class DownloadStore {
         }
     }
 
-    /// Reads the remote file's AAC samples through AVFoundation and writes them to a local .m4a unchanged
-    /// (passthrough). Export sessions can't read remote files, but AVAssetReader can.
-    nonisolated static func copyAudio(from asset: AVURLAsset, to dest: URL,
+    /// The official app's download request headers (its Dart HTTP client's defaults).
+    nonisolated static let officialHeaders = ["User-Agent": "Dart/3.5 (dart:io)", "Accept-Encoding": "gzip"]
+
+    nonisolated static func fetchFile(from remote: URL, to dest: URL,
                                       progress: @escaping @Sendable (Double) -> Void) async throws {
-        guard let track = try await asset.loadTracks(withMediaType: .audio).first else {
-            throw APIError.decoding("This episode has no audio to download.")
+        let config = URLSessionConfiguration.ephemeral
+        config.httpCookieStorage = nil
+        config.httpShouldSetCookies = false
+        config.urlCache = nil
+        config.httpAdditionalHeaders = officialHeaders
+        let session = URLSession(configuration: config)
+        defer { session.finishTasksAndInvalidate() }
+        var request = URLRequest(url: remote)
+        officialHeaders.forEach { request.setValue($1, forHTTPHeaderField: $0) }
+        let (temp, response) = try await session.download(for: request, delegate: DownloadProgress(progress))
+        let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+        guard status == 200 else {
+            try? FileManager.default.removeItem(at: temp)
+            SignInLog.write("download refused: HTTP \(status)")
+            throw APIError.decoding("The server refused the download (HTTP \(status)).")
         }
-        let duration = try await asset.load(.duration).seconds
-        let format = try await track.load(.formatDescriptions).first
+        try FileManager.default.moveItem(at: temp, to: dest)
+    }
 
-        let reader = try AVAssetReader(asset: asset)
-        let output = AVAssetReaderTrackOutput(track: track, outputSettings: nil)
-        output.alwaysCopiesSampleData = false
-        reader.add(output)
-
-        let writer = try AVAssetWriter(outputURL: dest, fileType: .m4a)
-        let input = AVAssetWriterInput(mediaType: .audio, outputSettings: nil, sourceFormatHint: format)
-        input.expectsMediaDataInRealTime = false
-        writer.add(input)
-
-        guard reader.startReading(), writer.startWriting() else {
-            throw reader.error ?? writer.error ?? APIError.decoding("Couldn't start the download.")
+    private final class DownloadProgress: NSObject, URLSessionDownloadDelegate, Sendable {
+        let report: @Sendable (Double) -> Void
+        init(_ report: @escaping @Sendable (Double) -> Void) { self.report = report }
+        func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didWriteData bytesWritten: Int64,
+                        totalBytesWritten: Int64, totalBytesExpectedToWrite: Int64) {
+            guard totalBytesExpectedToWrite > 0 else { return }
+            report(min(0.99, Double(totalBytesWritten) / Double(totalBytesExpectedToWrite)))
         }
-        writer.startSession(atSourceTime: .zero)
-
-        var lastReported = 0.0
-        while let sample = output.copyNextSampleBuffer() {
-            if Task.isCancelled {
-                reader.cancelReading()
-                writer.cancelWriting()
-                try? FileManager.default.removeItem(at: dest)
-                throw CancellationError()
-            }
-            while !input.isReadyForMoreMediaData { try await Task.sleep(for: .milliseconds(10)) }
-            input.append(sample)
-            let t = CMSampleBufferGetPresentationTimeStamp(sample).seconds
-            if duration > 0, t - lastReported > 5 {
-                lastReported = t
-                progress(min(0.99, t / duration))
-            }
-        }
-        input.markAsFinished()
-        await writer.finishWriting()
-        if reader.status == .failed || writer.status != .completed {
-            try? FileManager.default.removeItem(at: dest)
-            throw reader.error ?? writer.error ?? APIError.decoding("The download didn't finish.")
-        }
+        func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didFinishDownloadingTo location: URL) {}
     }
 
     private var indexURL: URL { directory.appendingPathComponent("index.json") }

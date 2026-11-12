@@ -26,6 +26,12 @@ struct MainTabView: View {
                let last = player.history.first {
                 player.playFromHistory(last)
             }
+            // `-debugDownload <episodeID>` starts a download on launch (testing without UI input).
+            let args = ProcessInfo.processInfo.arguments
+            if let i = args.firstIndex(of: "-debugDownload"), i + 1 < args.count,
+               let ep = try? await AIOService.episode(args[i + 1]) {
+                downloads.download(ep)
+            }
         }
         #endif
     }

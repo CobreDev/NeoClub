@@ -73,23 +73,22 @@ Headers on every call: `Authorization: Bearer …`, `X-Experience-Name: Adventur
 
 ## Downloads
 
-Media on `media.adventuresinodyssey.com` sits behind a CloudFront Function that runs before the signature check.
-Findings (2026-11-11, one 1-minute bonus song, read-only):
+The media host (`media.adventuresinodyssey.com`) runs a CloudFront Function in front of the signed URLs.
+It returns `401` (`x-cache: FunctionGeneratedResponse`) to requests that don't look like the official clients.
 
-- **Plain HTTP client** (URLSession, ephemeral, no cookies) on the signed `download_url`: `401`, `x-cache: FunctionGeneratedResponse`.
-  The function rejects the request before CloudFront checks the URL signature. Apple's media stack (`AppleCoreMedia`) gets through, which is why streaming works.
-- **AVAssetExportSession passthrough / AVAssetReader** on the remote `.mp4`: `AVFoundationErrorDomain -11838` (← `-16976`).
-  These don't support remote progressive assets.
-- **AVAssetDownloadURLSession** on the `.mp4`: fails immediately (`NSURLErrorDomain -1`). It only handles HLS. On the vphone VM it fails immediately for HLS too.
-- **AVAssetDownloadURLSession** on the HLS `stream_url` (simulator): the master playlist downloads (it carries its own signature).
-  The variant playlist then gets `403` from `nsurlsessiond`, which doesn't send the CloudFront cookies.
-  It still gets `403` with persistent cookies in `HTTPCookieStorage.shared` and with `AVURLAssetHTTPCookiesKey`.
-  Not yet verified: whether the undocumented `AVURLAssetHTTPHeaderFieldsKey` Cookie header helps (the test run didn't start, probably blocked by earlier stalled tasks).
+The official app downloads with dio (Dart's `HttpClient`). Its request was traced from its memory on 2026-11-11 (observation only):
+it's a single GET of the signed `download_url`, with no cookies, auth or API headers:
 
-Remaining options:
-1. **Trace how the official app downloads** (Frida on `duo-lab`, observation only), then make the same request.
-   This would match the official client's request shape, but it may mean presenting the official app's User-Agent to get past the CloudFront Function. That's the user's call.
-2. **Retest HLS with the explicit Cookie header** on a real device, after cancelling the stalled background tasks.
+```
+user-agent: Dart/3.5 (dart:io)
+accept-encoding: gzip
+host: media.adventuresinodyssey.com
+```
+
+NeoClub's `DownloadStore.fetchFile` sends the same request. Verified working: the file saved is AAC in MP4.
+Dead ends:
+- AVAssetExportSession and AVAssetReader don't support remote progressive assets (`-11838`).
+- AVAssetDownloadURLSession doesn't send the CloudFront cookies for HLS variants (`403`).
 
 ## Font licensing
 
