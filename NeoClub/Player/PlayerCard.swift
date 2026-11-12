@@ -42,9 +42,10 @@ final class PlayerCardModel {
     static func travelSpring(initialVelocity: CGFloat) -> Animation {
         .interpolatingSpring(mass: 1, stiffness: 333.3333, damping: 29.2119, initialVelocity: initialVelocity)
     }
-    /// Closing, the card takes the bar's shape on its own critically damped spring, started at release (but never
-    /// ahead of its travel), so even a fast flick shrinks into the bar over ~150 ms instead of snapping in a frame.
-    static let landSpring = Animation.spring(response: 0.35, dampingFraction: 1.0)
+    /// Closing, the card takes the bar's shape on its own spring, started at release (but never ahead of its travel),
+    /// so even a fast flick shrinks into the bar over ~170 ms instead of snapping in a frame. Slightly underdamped:
+    /// Apple Music's card settles into the bar with a small bounce (recorded on the Duo).
+    static let landSpring = Animation.spring(response: 0.34, dampingFraction: 0.72)
 
     /// How far the card is from full screen toward the bar (0…1).
     private var travel: CGFloat {
@@ -86,14 +87,19 @@ final class PlayerCardModel {
         DispatchQueue.main.asyncAfter(deadline: .now() + hold) { [weak self] in
             guard let self, self.generation == gen else { return }
             let remaining = max(1, self.miniFrame.minY - self.top)
-            withAnimation(Self.landSpring) { self.morph = 1 }
-            withAnimation(Self.travelSpring(initialVelocity: v / remaining)) {
-                self.top = self.miniFrame.minY
-            } completion: { [weak self] in
-                guard let self, self.generation == gen else { return }
+            // The card hands over to the real bar only once it has both arrived and finished taking the bar's shape
+            // (including the bounce). Waiting on the travel alone hid it mid-shrink when it was let go near the bar.
+            var running = 2
+            let finished = { [weak self] in
+                running -= 1
+                guard running == 0, let self, self.generation == gen else { return }
                 self.visible = false
                 self.closing = false
             }
+            withAnimation(Self.landSpring, completionCriteria: .removed) { self.morph = 1 } completion: { finished() }
+            withAnimation(Self.travelSpring(initialVelocity: v / remaining)) {
+                self.top = self.miniFrame.minY
+            } completion: { finished() }
         }
     }
 
@@ -128,7 +134,8 @@ struct CardGeometry: ViewModifier, Animatable {
 
     /// How far the card has taken the bar's size and position. Opening grows it on its own spring (fast, ahead
     /// of the position); closing ties it to the travel with a steep curve so it narrows only at the end.
-    var shape: CGFloat { closing ? min(morph, pow(travel, 10)) : morph }
+    /// Once the card is at the bar, the morph alone drives it, so its bounce (past the bar's size and back) shows.
+    var shape: CGFloat { closing ? (travel >= 0.999 ? morph : min(morph, pow(travel, 10))) : morph }
 
     var rect: CGRect {
         let m = shape
@@ -136,7 +143,12 @@ struct CardGeometry: ViewModifier, Animatable {
         let midX = full.midX + (mini.midX - full.midX) * m
         let height = full.height + (mini.height - full.height) * m
         // Never past the bar: a hard flick's spring would otherwise dip the card below it before settling.
-        return CGRect(x: midX - width / 2, y: min(top, mini.minY), width: width, height: height)
+        let y0 = min(top, mini.minY)
+        // Closing, the shrink also pulls the card the rest of the way down, so it lands on the bar's glass exactly as
+        // it takes the bar's shape instead of shrinking first and then sliding into place.
+        let pull = closing ? min(1, max(0, m)) : 0
+        let y = y0 + (mini.minY - y0) * pull
+        return CGRect(x: midX - width / 2, y: y, width: width, height: height)
     }
 
     /// Cross-fade between the full player and the mini player's face, driven by how close the card is to the bar
@@ -148,7 +160,7 @@ struct CardGeometry: ViewModifier, Animatable {
     }
 
     /// 8 pt open, growing with travel and the morph to the mini player's capsule radius.
-    var radius: CGFloat { 8 + (mini.height / 2 - 8) * max(travel, shape) }
+    var radius: CGFloat { min(8 + (mini.height / 2 - 8) * max(travel, shape), rect.height / 2) }
 
     func body(content: Content) -> some View {
         let r = rect
