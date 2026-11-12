@@ -41,13 +41,19 @@ struct HomeView: View {
         .navigationTitle("Home")
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
-                Button { showAccount = true } label: {
+                // Tap: Account. Hold: the debug menu.
+                Menu {
+                    DebugMenu()
+                } label: {
                     if let profile = app.profile {
                         ProfileBadge(profile: profile, size: 36, showsName: false)
                             .padding(4)
                             .glassEffect(.regular.interactive(), in: .circle)
                     }
+                } primaryAction: {
+                    showAccount = true
                 }
+                .menuStyle(.button)
                 .buttonStyle(.plain)
                 .accessibilityLabel("Account")
             }

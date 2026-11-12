@@ -18,6 +18,8 @@
 	<string>1.0</string>
 	<key>CFBundleVersion</key>
 	<string>1</string>
+	<key>LSSupportsOpeningDocumentsInPlace</key>
+	<true/>
 	<key>UIAppFonts</key>
 	<array>
 		<string>JacobyICGBlack.ttf</string>
@@ -28,6 +30,8 @@
 	<array>
 		<string>audio</string>
 	</array>
+	<key>UIFileSharingEnabled</key>
+	<true/>
 	<key>UIUserInterfaceStyle</key>
 	<string>Automatic</string>
 </dict>

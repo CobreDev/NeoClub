@@ -66,13 +66,26 @@ struct GroupingView: View {
             }
             .padding(.horizontal, 24)
             if let next = continueEpisode {
-                Button { play(next) } label: {
-                    Label(continueLabel(next), systemImage: "play.fill")
-                        .font(.universBold(17))
-                        .frame(maxWidth: 280)
-                        .padding(.vertical, 4)
+                // Apple Music's album row: shuffle, the play button, download.
+                HStack(spacing: 14) {
+                    Button { shuffle() } label: {
+                        Image(systemName: "shuffle").font(.system(size: 19, weight: .semibold))
+                            .frame(width: 50, height: 50)
+                            .foregroundStyle(.white)
+                            .contentShape(.circle)
+                    }
+                    .buttonStyle(.plain)
+                    .glassEffect(.regular.interactive(), in: .circle)
+                    .accessibilityLabel("Shuffle")
+                    Button { play(next) } label: {
+                        Label(continueLabel(next), systemImage: "play.fill")
+                            .font(.universBold(17))
+                            .frame(maxWidth: 200)
+                            .padding(.vertical, 4)
+                    }
+                    .aioPrimaryButton()
+                    DownloadButton(episodes: playable.filter(\.isAudio))
                 }
-                .aioPrimaryButton()
             }
             if let text = shown?.fullDescription ?? shown?.description, !text.isEmpty {
                 Text(text)
@@ -107,6 +120,14 @@ struct GroupingView: View {
         if player.progress(for: e)?.isInProgress == true { return "Resume" }
         if episodes.contains(where: { player.progress(for: $0)?.isComplete == true }) { return "Play Next" }
         return "Play"
+    }
+
+    /// Plays the album's episodes in a random order.
+    private func shuffle() {
+        var order = playable.shuffled()
+        guard !order.isEmpty else { return }
+        let first = order.removeFirst()
+        player.play(first, queue: order, groupingID: groupingID)
     }
 
     private func play(_ episode: Episode) {

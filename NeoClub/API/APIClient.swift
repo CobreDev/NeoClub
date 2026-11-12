@@ -140,8 +140,9 @@ enum ResponseCache {
 enum DebugAPILog {
     static func record(_ req: URLRequest, status: Int, data: Data) {
         #if DEBUG
-        let dir = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("api-log", isDirectory: true)
+        // Library/Logs, not Documents: Documents is visible in the Files app.
+        let dir = FileManager.default.urls(for: .libraryDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("Logs/api-log", isDirectory: true)
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         let name = "\(req.httpMethod ?? "GET")\(req.url?.path ?? "")"
             .replacingOccurrences(of: "/", with: "_")

@@ -210,8 +210,9 @@ enum SignInLog {
 
     static func write(_ line: String) {
         #if DEBUG
-        let url = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("signin-log.txt")
+        let dir = FileManager.default.urls(for: .libraryDirectory, in: .userDomainMask)[0].appendingPathComponent("Logs")
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let url = dir.appendingPathComponent("signin-log.txt")
         let entry = "\(Date().formatted(date: .omitted, time: .standard)) \(line)\n"
         if let h = try? FileHandle(forWritingTo: url) {
             h.seekToEndOfFile(); h.write(Data(entry.utf8)); try? h.close()

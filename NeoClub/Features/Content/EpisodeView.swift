@@ -150,22 +150,8 @@ struct EpisodeView: View {
     }
 
     @ViewBuilder private var downloadButton: some View {
-        if downloads.isDownloaded(shown.id) {
-            Button { downloads.delete(shown.id) } label: {
-                Image(systemName: "arrow.down.circle.fill").font(.title2)
-            }
-            .buttonStyle(.glass)
-            .accessibilityLabel("Remove download")
-        } else if let f = downloads.active[shown.id] {
-            ProgressView(value: f).progressViewStyle(.circular).frame(width: 44, height: 44)
-        } else {
-            Button { downloads.download(shown) } label: {
-                Image(systemName: "arrow.down.circle").font(.title2)
-            }
-            .buttonStyle(.glass)
-            .accessibilityLabel("Download")
-            .disabled(!shown.isAudio && detail != nil)
-        }
+        DownloadButton(episodes: [shown], size: 44)
+            .disabled(!shown.isAudio && detail != nil && !downloads.isDownloaded(shown.id))
     }
 
     private var playLabel: String {

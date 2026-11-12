@@ -183,11 +183,7 @@ struct EpisodeRow: View {
                     .controlSize(.small) }
                     ProgressIndicator(progress: player.progress(for: episode), durationMs: episode.mediaLength)
                     Spacer()
-                    if downloads.isDownloaded(episode.id) {
-                        Image(systemName: "arrow.down.circle.fill").foregroundStyle(.secondary)
-                    } else if let f = downloads.active[episode.id] {
-                        ProgressView(value: f).progressViewStyle(.circular).controlSize(.small)
-                    }
+                    DownloadStatusIcon(id: episode.id)
                 }
                 .padding(.top, 2)
             }
@@ -447,5 +443,83 @@ extension View {
     /// Long-press menu for an album or collection.
     func groupingContextMenu(id: String, grouping: Grouping?) -> some View {
         contextMenu { GroupingActions(id: id, grouping: grouping) }
+    }
+}
+
+/// Apple Music's download control, for one episode or a whole album: a circle button showing a down arrow, then a
+/// progress ring with a stop square while downloading (tap to stop), then a checkmark (tap to remove, after asking).
+struct DownloadButton: View {
+    @Environment(DownloadStore.self) private var downloads
+    let episodes: [Episode]
+    var size: CGFloat = 50
+    @State private var confirmRemove = false
+
+    private var ids: [String] { episodes.map(\.id) }
+    private var allDone: Bool { !episodes.isEmpty && episodes.allSatisfy { downloads.isDownloaded($0.id) } }
+    /// Overall progress while any are downloading or queued (finished episodes count as complete).
+    private var progress: Double? {
+        let running = ids.compactMap { downloads.active[$0] }
+        guard !running.isEmpty else { return nil }
+        let done = ids.filter { downloads.isDownloaded($0) }.count
+        return (Double(done) + running.reduce(0, +)) / Double(max(1, done + running.count))
+    }
+
+    var body: some View {
+        Button {
+            if allDone { confirmRemove = true }
+            else if progress != nil { downloads.cancel(all: ids) }
+            else { downloads.download(all: episodes) }
+        } label: {
+            ZStack {
+                if allDone {
+                    Image(systemName: "checkmark").font(.system(size: size * 0.38, weight: .semibold))
+                } else if let progress {
+                    Circle().stroke(.white.opacity(0.25), lineWidth: 2.5).frame(width: size * 0.5)
+                    Circle().trim(from: 0, to: max(0.03, progress))
+                        .stroke(.white, style: StrokeStyle(lineWidth: 2.5, lineCap: .round))
+                        .rotationEffect(.degrees(-90))
+                        .frame(width: size * 0.5)
+                        .animation(.linear(duration: 0.2), value: progress)
+                    RoundedRectangle(cornerRadius: 2).frame(width: size * 0.17, height: size * 0.17)
+                } else {
+                    Image(systemName: "arrow.down").font(.system(size: size * 0.38, weight: .semibold))
+                }
+            }
+            .frame(width: size, height: size)
+            .foregroundStyle(.white)
+            .contentShape(.circle)
+        }
+        .buttonStyle(.plain)
+        .glassEffect(.regular.interactive(), in: .circle)
+        .accessibilityLabel(allDone ? "Downloaded" : progress != nil ? "Stop Downloading" : "Download")
+        .confirmationDialog(episodes.count == 1 ? "Remove this download?" : "Remove these downloads?",
+                            isPresented: $confirmRemove, titleVisibility: .visible) {
+            Button(episodes.count == 1 ? "Remove Download" : "Remove Downloads", role: .destructive) {
+                downloads.delete(all: ids)
+            }
+        }
+    }
+}
+
+/// Small per-row indicator: a filled down-arrow circle once downloaded (Apple Music), a thin ring while downloading.
+struct DownloadStatusIcon: View {
+    @Environment(DownloadStore.self) private var downloads
+    let id: String
+
+    var body: some View {
+        if downloads.isDownloaded(id) {
+            Image(systemName: "arrow.down.circle.fill")
+                .foregroundStyle(.secondary)
+                .accessibilityLabel("Downloaded")
+        } else if let f = downloads.active[id] {
+            ZStack {
+                Circle().stroke(.secondary.opacity(0.4), lineWidth: 2)
+                Circle().trim(from: 0, to: max(0.03, f))
+                    .stroke(.secondary, style: StrokeStyle(lineWidth: 2, lineCap: .round))
+                    .rotationEffect(.degrees(-90))
+            }
+            .frame(width: 16, height: 16)
+            .accessibilityLabel("Downloading")
+        }
     }
 }

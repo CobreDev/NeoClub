@@ -33,6 +33,8 @@ targets:
       path: NeoClub/Info.plist
       properties:
         UIBackgroundModes: [audio]
+        UIFileSharingEnabled: true
+        LSSupportsOpeningDocumentsInPlace: true
         UIAppFonts: [JacobyICGBlack.ttf, UniversRegular.ttf, UniversBold.ttf]
         UIUserInterfaceStyle: Automatic
   NeoClubTests:

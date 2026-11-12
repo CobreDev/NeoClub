@@ -57,11 +57,36 @@ final class DownloadStore {
     func download(_ episode: Episode) {
         guard !isDownloaded(episode.id), active[episode.id] == nil else { return }
         active[episode.id] = 0
-        downloading.insert(episode, at: 0)
+        downloading.append(episode)
+        // One at a time (a whole album queues up), like a person downloading episodes one after another.
+        if running == nil { begin(episode) } else { waiting.append(episode) }
+    }
+
+    /// Downloads every episode in the list that isn't downloaded yet, in order.
+    func download(all episodes: [Episode]) {
+        for e in episodes where e.isAudio || e.type == nil { download(e) }
+    }
+
+    /// Cancels several (e.g. an album's) downloads, queued or running.
+    func cancel(all ids: [String]) { ids.forEach(cancel) }
+
+    /// Removes several downloads.
+    func delete(all ids: [String]) { ids.forEach(delete) }
+
+    @ObservationIgnored private var running: String?
+    @ObservationIgnored private var waiting: [Episode] = []
+
+    private func begin(_ episode: Episode) {
+        running = episode.id
         Task { await start(episode) }
     }
 
     func cancel(_ id: String) {
+        if let i = waiting.firstIndex(where: { $0.id == id }) {
+            waiting.remove(at: i)
+            finish(id)
+            return
+        }
         Task {
             foreground[id]?.cancel()
             if let bg = readyDownloader {
@@ -72,9 +97,56 @@ final class DownloadStore {
     }
 
     func delete(_ id: String) {
+        if let item = items.first(where: { $0.id == id }) { removeExport(item) }
         if let url = localFile(for: id) { try? FileManager.default.removeItem(at: url) }
         items.removeAll { $0.id == id }
         save()
+    }
+
+    // MARK: Copies in Files (debug option)
+
+    /// Debug option: also keep each downloaded episode in the app's folder in the Files app, named by its title.
+    static let exportKey = "exportDownloadsToFiles"
+    static var exportsToFiles: Bool { UserDefaults.standard.bool(forKey: exportKey) }
+
+    /// On My iPhone > AIO Club > Episodes.
+    private var exportDirectory: URL {
+        FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0].appendingPathComponent("Episodes", isDirectory: true)
+    }
+
+    /// "#001 Whit's Flop.m4a" (the files are AAC in MP4, which Files and other apps open as .m4a; songs stay .mp3).
+    private func exportName(_ item: Item) -> String {
+        let detail = try? JSONDecoder().decode(Episode.self, from: item.episodeJSON)
+        let title = (detail?.numberedTitle ?? item.title)
+            .replacingOccurrences(of: ":", with: "")
+            .replacingOccurrences(of: "/", with: "-")
+        let ext = (item.fileName as NSString).pathExtension.lowercased()
+        return "\(title).\(ext == "mp4" ? "m4a" : ext)"
+    }
+
+    private func export(_ item: Item) {
+        guard let source = localFile(for: item.id) else { return }
+        try? FileManager.default.createDirectory(at: exportDirectory, withIntermediateDirectories: true)
+        let dest = exportDirectory.appendingPathComponent(exportName(item))
+        try? FileManager.default.removeItem(at: dest)
+        // A hard link: the same file twice in the folder listing, no extra space.
+        if (try? FileManager.default.linkItem(at: source, to: dest)) == nil {
+            try? FileManager.default.copyItem(at: source, to: dest)
+        }
+    }
+
+    private func removeExport(_ item: Item) {
+        try? FileManager.default.removeItem(at: exportDirectory.appendingPathComponent(exportName(item)))
+    }
+
+    /// Turns the Files copies on (exporting everything already downloaded) or off (removing them).
+    func setExportsToFiles(_ on: Bool) {
+        UserDefaults.standard.set(on, forKey: Self.exportKey)
+        if on {
+            items.forEach(export)
+        } else {
+            try? FileManager.default.removeItem(at: exportDirectory)
+        }
     }
 
     var totalBytes: Int64 { items.reduce(0) { $0 + $1.bytes } }
@@ -152,6 +224,7 @@ final class DownloadStore {
                           subtitle: detail.subtitle, artwork: detail.thumbnailMedium ?? detail.thumbnailSmall,
                           bytes: bytes, downloadedAt: Date(), episodeJSON: raw), at: 0)
         save()
+        if Self.exportsToFiles, let item = items.first { export(item) }
         try? FileManager.default.removeItem(at: pending)
         SignInLog.write("download saved: \(bytes) bytes")
         finish(id)
@@ -173,6 +246,10 @@ final class DownloadStore {
     private func finish(_ id: String) {
         active[id] = nil
         downloading.removeAll { $0.id == id }
+        if running == id {
+            running = nil
+            if !waiting.isEmpty { begin(waiting.removeFirst()) }
+        }
     }
 
     @ObservationIgnored private var foreground: [String: Task<Void, Never>] = [:]
@@ -219,6 +296,7 @@ final class DownloadStore {
                 active[id] = task.countOfBytesExpectedToReceive > 0
                     ? Double(task.countOfBytesReceived) / Double(task.countOfBytesExpectedToReceive) : 0
                 downloading.append(episode)
+                if running == nil { running = id }
             }
         }
     }

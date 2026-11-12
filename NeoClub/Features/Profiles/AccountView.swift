@@ -4,7 +4,6 @@ import SwiftUI
 struct AccountView: View {
     @Environment(AppModel.self) private var app
     @Environment(\.dismiss) private var dismiss
-    @State private var syncProgress = ProgressSync.isEnabled
     @State private var confirmSignOut = false
 
     var body: some View {
@@ -29,13 +28,6 @@ struct AccountView: View {
                         }
                         .aioRow()
                     }
-                }
-                Section {
-                    Toggle("Sync Listening Progress", isOn: $syncProgress)
-                        .onChange(of: syncProgress) { _, on in ProgressSync.isEnabled = on }
-                        .aioRow()
-                } footer: {
-                    Text("Saves where you stop listening to your Adventures in Odyssey Club account, like the official app.")
                 }
                 #if DEBUG
                 Section("Developer") {

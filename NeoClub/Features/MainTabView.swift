@@ -71,6 +71,15 @@ struct MainTabView: View {
                let ep = try? await AIOService.episode(args[i + 1]) {
                 paths[tab, default: []].append(Route.episode(ep, groupingID: nil))
             }
+            // `-debugRestoreTestEpisode` puts Whit's Flop back to Complete at its full length on the account (after tests).
+            if args.contains("-debugRestoreTestEpisode") {
+                do {
+                    try await AIOService.saveProgress(episodeID: Self.testEpisodeID, status: "Complete", positionMs: 1_301_240)
+                    SignInLog.write("test episode restored: Complete at 1301240")
+                } catch {
+                    SignInLog.write("test episode restore failed: \(error.localizedDescription)")
+                }
+            }
             // `-debugDownload <episodeID>` starts a download on launch (testing without UI input).
             if let i = args.firstIndex(of: "-debugDownload"), i + 1 < args.count,
                let ep = try? await AIOService.episode(args[i + 1]) {
