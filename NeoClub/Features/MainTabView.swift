@@ -250,11 +250,15 @@ struct MiniPlayer: View {
 /// finger): the card slides down at full size, 1:1 with the finger, and only morphs into the bar when it's let go.
 /// Music does this by moving the card's container (`UIDropShadowView`) during the drag and starting the landing from
 /// wherever it was released (traced 2026-11-12); this does the same with the presentation's container.
+///
+/// The drag is a UIKit pan on the presented controller's view, as in Music (its sheet's
+/// `_UISheetInteractionBackgroundDismissRecognizer`, a `UIPanGestureRecognizer` on the card container, traced
+/// 2026-11-12): it takes over from any button the finger started on (Music's grabber is a `UIControl` under it), so a
+/// drag works from anywhere on the card, the grabber and the top edge included. Like Music, the app doesn't defer the
+/// screen's top edge, so a swipe starting on the edge itself still opens Notification Center.
 struct NowPlayingPresentation: View {
     @Environment(AudioPlayer.self) private var player
     @State private var card = PresentedCard()
-    /// Touch slop before the card starts to follow (UIKit's).
-    private let slop: CGFloat = 12
 
     /// The screen's insets, from the window: inside the growing card the view's own safe area is measured in its
     /// scaled space and comes out huge, which pushed the player's contents off the card while it opened.
@@ -273,34 +277,78 @@ struct NowPlayingPresentation: View {
             .ignoresSafeArea()
             // Kept built between opens: idle (no scrolling titles, no scrubber updates) while it's closed.
             .environment(\.isOnScreen, NowPlayingPresenter.shared.isPresented)
-            .background(PresentedControllerReader { card.controller = $0 })
-        // The system's drag-to-dismiss would shrink the card; the drag below replaces it.
-        .interactiveDismissDisabled()
-        .gesture(DragGesture(minimumDistance: slop, coordinateSpace: .global)
-            .onChanged { v in
-                guard v.translation.height > 0, abs(v.translation.height) > abs(v.translation.width) || card.dragging else { return }
-                card.follow(max(0, v.translation.height - slop))
-            }
-            .onEnded { v in
-                guard card.dragging else { return }
-                let distance = v.translation.height - slop
-                if distance > 140 || v.velocity.height > 500 {
-                    // Hand over to the system dismissal from where the card is now: it lands in the bar from here.
-                    card.release()
-                    player.showNowPlaying = false
-                } else {
-                    card.snapBack()
-                }
+            .background(PresentedControllerReader { [player] vc in
+                card.attach(to: vc) { player.showNowPlaying = false }
             })
+        // The system's drag-to-dismiss would shrink the card; the card's own pan replaces it.
+        .interactiveDismissDisabled()
     }
 }
 
 /// The presented card's container view, moved directly during the drag (as Apple Music moves its `UIDropShadowView`).
 @MainActor
-final class PresentedCard {
+final class PresentedCard: NSObject, UIGestureRecognizerDelegate {
     weak var controller: UIViewController?
+    private var onDismiss: (() -> Void)?
+    private weak var pan: UIPanGestureRecognizer?
     private(set) var dragging = false
     private var restCenter: CGPoint?
+
+    /// Installs the drag on the controller's view (once).
+    func attach(to vc: UIViewController, onDismiss: @escaping () -> Void) {
+        controller = vc
+        self.onDismiss = onDismiss
+        guard pan?.view !== vc.view else { return }
+        let p = UIPanGestureRecognizer(target: self, action: #selector(handlePan(_:)))
+        p.delegate = self
+        p.maximumNumberOfTouches = 1
+        vc.view.addGestureRecognizer(p)
+        pan = p
+    }
+
+    @objc private func handlePan(_ p: UIPanGestureRecognizer) {
+        let ty = p.translation(in: p.view?.window).y
+        switch p.state {
+        case .began, .changed:
+            follow(max(0, ty))
+        case .ended:
+            guard dragging else { return }
+            if ty > 140 || p.velocity(in: p.view?.window).y > 500 {
+                // Hand over to the system dismissal from where the card is now: it lands in the bar from here.
+                release()
+                onDismiss?()
+            } else {
+                snapBack()
+            }
+        case .cancelled, .failed:
+            snapBack()
+        default: break
+        }
+    }
+
+    // Starts only on a downward, mostly vertical drag, like Music's sheet pan.
+    func gestureRecognizerShouldBegin(_ g: UIGestureRecognizer) -> Bool {
+        guard let p = g as? UIPanGestureRecognizer else { return true }
+        let v = p.velocity(in: p.view)
+        return v.y > 0 && v.y > abs(v.x)
+    }
+
+    /// Not from sliders, and not from a list that's scrolled down (it scrolls back up first, as in Music).
+    func gestureRecognizer(_ g: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
+        var v = touch.view
+        while let view = v, view !== g.view {
+            if view is UISlider { return false }
+            if let s = view as? UIScrollView, s.isScrollEnabled, s.alwaysBounceVertical || s.contentSize.height > s.bounds.height,
+               s.contentOffset.y > -s.adjustedContentInset.top + 0.5 { return false }
+            v = view.superview
+        }
+        return true
+    }
+
+    /// A list at its top waits for the card: dragging down there moves the card, not the list.
+    func gestureRecognizer(_ g: UIGestureRecognizer, shouldBeRequiredToFailBy other: UIGestureRecognizer) -> Bool {
+        other.view is UIScrollView && other is UIPanGestureRecognizer
+    }
 
     /// The view the zoom transition animates: the presentation's outermost container under the transition view.
     private var container: UIView? {
@@ -332,7 +380,7 @@ final class PresentedCard {
         restCenter = nil
     }
 
-    /// Finger lifted without dismissing: back up on Apple Music's critically damped spring.
+/// Finger lifted without dismissing: back up on Apple Music's critically damped spring.
     func snapBack() {
         guard let c = container, let rest = restCenter else { dragging = false; return }
         dragging = false

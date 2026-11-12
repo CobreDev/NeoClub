@@ -155,6 +155,8 @@ struct NowPlayingView: View {
         }
         .frame(width: content)
         .frame(maxWidth: .infinity)
+        // The grabber at the top edge (tap to close), over the layout so the halves stay put.
+        .overlay(alignment: .top) { grabber(large: true) }
     }
 
     /// Landscape inner screen (Apple Music on a wide screen): a ~400 pt column with 330 pt artwork, centered; with
