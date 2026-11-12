@@ -91,6 +91,29 @@ final class NowPlayingPresenter: NSObject {
         options.dimmingVisualEffect = nil
         vc.preferredTransition = .zoom(options: options) { [weak self] _ in self?.accessoryView() }
         vc.dismiss(animated: true)
+        // The zoom dismissal also springs the page behind back out from a pushed-back position (a visible bounce).
+        // Apple Music's page never moves: drop those animations from the page behind, leaving the card's landing.
+        holdBackgroundStill()
+        DispatchQueue.main.async { [weak self] in self?.holdBackgroundStill() }
+    }
+
+    /// Removes geometry animations from the presenting page (the tab shell) and the containers above it.
+    private func holdBackgroundStill() {
+        guard let window, var view = window.rootViewController?.view else { return }
+        let keys = ["transform", "position", "bounds", "anchorPoint", "sublayerTransform", "zPosition"]
+        while true {
+            if let names = view.layer.animationKeys() {
+                for name in names {
+                    let keyPath = (view.layer.animation(forKey: name) as? CAPropertyAnimation)?.keyPath ?? name
+                    if keys.contains(where: { keyPath.hasPrefix($0) || name.hasPrefix($0) }) {
+                        view.layer.removeAnimation(forKey: name)
+                    }
+                }
+            }
+            view.layer.transform = CATransform3DIdentity
+            guard let parent = view.superview, !(parent is UIWindow) else { break }
+            view = parent
+        }
     }
 }
 
