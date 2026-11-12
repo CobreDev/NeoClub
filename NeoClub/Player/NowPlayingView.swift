@@ -12,6 +12,9 @@ struct NowPlayingView: View {
     @Environment(AudioPlayer.self) private var player
     /// The card host draws the backdrop itself (full-bleed), so the player can be inset to the safe area.
     var drawsBackground = true
+    /// The screen's safe-area insets (the card pads the player by them). Used to place things relative to the
+    /// screen's edges the way Apple Music does: the grabber, the side margins and the bottom row.
+    var insets = EdgeInsets()
     @State private var mode: Mode = .artwork
     @State private var halfFolded = false
     /// Shared between the big artwork/title and the small header, so switching to Up Next moves the same artwork
@@ -52,47 +55,64 @@ struct NowPlayingView: View {
         .presentationBackground(Color.aioNavy)
     }
 
+    /// Grabber centered 21 pt below the screen's top edge (Apple Music).
+    private var grabberTop: CGFloat { max(0, 9 - insets.top) }
+
+    /// The grabber; tapping it closes Now Playing, like Apple Music.
     private var grabber: some View {
-        Capsule().fill(.white.opacity(0.35)).frame(width: 36, height: 5).padding(.top, 7)
+        Button { player.showNowPlaying = false } label: {
+            Capsule().fill(.white.opacity(0.35)).frame(width: 36, height: 5)
+                .frame(width: 120, height: 24)
+                .contentShape(.rect)
+        }
+        .buttonStyle(.plain)
+        .padding(.top, grabberTop)
+        .accessibilityLabel("Close Now Playing")
     }
 
     // MARK: Layouts
 
-    /// Portrait (phone width, the Duo's outer screen, or the inner screen upright), measured from Apple Music:
-    /// the artwork fills a column of up to 513 pt with 28 pt margins; the scrubber, controls, volume and bottom
-    /// buttons stay exactly where they are when Up Next opens, and only the area above them changes.
+    /// Portrait (phone width, the Duo's outer screen, or the inner screen upright), measured from Apple Music on the
+    /// iPhone Duo: a column 32 pt in from the screen's edges (up to 513 pt wide, centered on the big screen); the
+    /// controls are anchored to the bottom with the output label ~23 pt above the screen edge; the artwork fills
+    /// what's left above, 21 pt over the title. The controls never move when Up Next opens.
     private func portraitLayout(_ size: CGSize) -> some View {
-        let content = min(size.width - 56, 513)
         let narrow = size.width < 500
+        let lead = narrow ? max(0, 32 - insets.leading) : 28
+        let trail = narrow ? max(0, 32 - insets.trailing) : 28
+        let content = min(size.width - lead - trail, 513)
         return VStack(spacing: 0) {
             grabber
             VStack(spacing: 0) {
                 if mode == .artwork {
-                    Spacer(minLength: 12)
+                    Spacer(minLength: 22)
                     // Up to the column width, smaller when the screen is short, so the controls below never move.
                     bigArtwork.frame(maxWidth: content, maxHeight: content)
-                    Spacer(minLength: 24)
-                    titleRow
+                    titleRow.padding(.top, 21)
                 } else {
                     compactHeader.padding(.top, 18)
                     if narrow { modeCapsules.padding(.top, 16) }
                     panel.padding(.top, 16)
                 }
             }
-            .frame(maxHeight: .infinity, alignment: .top)
+            .frame(maxHeight: .infinity, alignment: mode == .artwork ? .bottom : .top)
             controls(narrow: narrow, large: size.height > 800)
         }
         .frame(width: content)
-        .frame(maxWidth: .infinity)
+        .padding(.leading, narrow ? lead : 0)
+        .frame(maxWidth: .infinity, alignment: narrow ? .leading : .center)
+        // Output label ~23 pt above the screen's bottom edge, whatever the home-indicator inset.
+        .padding(.bottom, 16 - insets.bottom)
     }
 
-    /// Scrubber, transport, volume and the bottom buttons: the part that never moves.
+    /// Scrubber, transport, volume and the bottom buttons: the part that never moves. Gaps measured from Apple
+    /// Music on the Duo's outer screen (compact) and its inner screen upright (large).
     private func controls(narrow: Bool, large: Bool) -> some View {
         VStack(spacing: 0) {
-            ScrubberBar().padding(.top, 22)
-            transport(narrow: narrow).padding(.top, large ? 34 : 22)
-            VolumeBar().padding(.top, large ? 40 : 26)
-            bottomBar.padding(.top, large ? 34 : 26).padding(.bottom, 6)
+            ScrubberBar().padding(.top, large ? 29 : 7)
+            transport(narrow: narrow).padding(.top, large ? 9 : 0)
+            VolumeBar().padding(.top, large ? 30 : 26)
+            bottomBar.padding(.top, large ? 37 : 22)
         }
     }
 
@@ -225,7 +245,7 @@ struct NowPlayingView: View {
     }
 
     private func titles(size: CGFloat) -> some View {
-        VStack(alignment: .leading, spacing: 1) {
+        VStack(alignment: .leading, spacing: -2) {
             Text(player.episode?.title ?? "")
                 .font(.universBold(size, relativeTo: .title3))
                 .lineLimit(1)
@@ -302,17 +322,18 @@ struct NowPlayingView: View {
                 SleepTimerButton().frame(width: 44)
             }
         }
-        .padding(.horizontal, narrow ? 24 : 0)
+        .padding(.horizontal, narrow ? 54 : 0)
         .buttonStyle(.plain)
     }
 
-    /// Info (where Apple has Lyrics/Transcript), AirPlay with output name, and Up Next.
+    /// Info (where Apple has Lyrics/Transcript), AirPlay with the output name below it, and Up Next — the three
+    /// buttons on one line, the label 25 pt below their centers (Apple Music).
     private var bottomBar: some View {
         HStack(alignment: .top) {
             toggle(.info, symbol: "info.circle", label: "About This Episode")
             Spacer()
-            VStack(spacing: 4) {
-                RoutePicker().frame(width: 30, height: 26)
+            VStack(spacing: -2) {
+                RoutePicker().frame(width: 40, height: 40)
                 Text(player.outputName)
                     .font(.univers(12, relativeTo: .caption))
                     .opacity(0.6)
@@ -321,7 +342,6 @@ struct NowPlayingView: View {
             Spacer()
             toggle(.queue, symbol: "list.bullet", label: "Up Next")
         }
-        .frame(height: 44)
     }
 
     private func toggle(_ target: Mode, symbol: String, label: String) -> some View {
@@ -357,7 +377,7 @@ private struct ScrubberBar: View {
         let total = max(player.duration, 1)
         let fraction = dragFraction ?? pendingFraction ?? min(1, player.position / total)
         let dragging = dragFraction != nil
-        VStack(spacing: 8) {
+        VStack(spacing: 4) {
             GeometryReader { g in
                 ZStack(alignment: .leading) {
                     Capsule().fill(.white.opacity(0.25))

@@ -42,6 +42,41 @@ final class PlayerCardModel {
     static func travelSpring(initialVelocity: CGFloat) -> Animation {
         .interpolatingSpring(mass: 1, stiffness: 333.3333, damping: 29.2119, initialVelocity: initialVelocity)
     }
+    /// Closing, the card takes the bar's shape on a quick critically damped spring (but never before it reaches
+    /// the bar), so it shrinks smoothly whether it arrives fast or was dragged most of the way there slowly.
+    static let landSpring = Animation.spring(response: 0.2, dampingFraction: 1.0)
+
+    /// How far the card is from full screen toward the bar (0…1).
+    private var travel: CGFloat {
+        min(1, max(0, (top - fullFrame.minY) / max(1, miniFrame.minY - fullFrame.minY)))
+    }
+
+    /// Dragging up from the mini player: the card comes up under the finger right away (Apple Music).
+    func dragOpen(up: CGFloat) {
+        var tx = Transaction(); tx.disablesAnimations = true
+        withTransaction(tx) {
+            if !visible || !closing {
+                generation += 1
+                if !visible { morph = 1; face = 1; visible = true }
+                closing = true
+            }
+            top = max(fullFrame.minY, miniFrame.minY - max(0, up))
+        }
+    }
+
+    /// Finger lifted after dragging up: open if it went far or fast enough (call `open` via `finish`), else
+    /// settle back into the bar.
+    func endOpenDrag(up: CGFloat, velocity: CGFloat, finish: () -> Void) {
+        guard visible, closing else { return }
+        if up > 60 || velocity > 300 {
+            // Hand over from the drag's shape to the opening spring without a jump.
+            var tx = Transaction(); tx.disablesAnimations = true
+            withTransaction(tx) { morph = min(1, pow(travel, 10)); closing = false }
+            finish()
+        } else {
+            close(velocity: 0)
+        }
+    }
 
     func open() {
         generation += 1
@@ -72,17 +107,19 @@ final class PlayerCardModel {
         let gen = generation
         closing = true
         let v = max(0, velocity)
-        // A dragged card holds where the finger left it, then collapses.
-        let hold = top > fullFrame.minY + 1 ? Self.releaseHold : 0
+        // A card dragged down holds where the finger left it, then collapses.
+        let hold = top > fullFrame.minY + 1 && morph < 1 ? Self.releaseHold : 0
         DispatchQueue.main.asyncAfter(deadline: .now() + hold) { [weak self] in
             guard let self, self.generation == gen else { return }
             let remaining = max(1, self.miniFrame.minY - self.top)
-            withAnimation(Self.morphSpring) { self.morph = 1 } completion: { [weak self] in
+            withAnimation(Self.landSpring) { self.morph = 1 }
+            withAnimation(Self.travelSpring(initialVelocity: v / remaining)) {
+                self.top = self.miniFrame.minY
+            } completion: { [weak self] in
                 guard let self, self.generation == gen else { return }
                 self.visible = false
                 self.closing = false
             }
-            withAnimation(Self.travelSpring(initialVelocity: v / remaining)) { self.top = self.miniFrame.minY }
         }
     }
 
@@ -117,7 +154,7 @@ struct CardGeometry: ViewModifier, Animatable {
 
     /// How far the card has taken the bar's size and position. Opening grows it on its own spring (fast, ahead
     /// of the position); closing ties it to the travel with a steep curve so it narrows only at the end.
-    var shape: CGFloat { closing ? pow(travel, 10) : morph }
+    var shape: CGFloat { closing ? min(morph, pow(travel, 10)) : morph }
 
     var rect: CGRect {
         let m = shape
@@ -132,7 +169,7 @@ struct CardGeometry: ViewModifier, Animatable {
     /// Closing, the bar's face shows as soon as the card nears the bottom (Apple Music shows it inside the card
     /// before the card has shrunk); opening, it gives way as the card grows.
     var faceProgress: CGFloat {
-        closing ? Self.smoothstep((travel - 0.7) / 0.25) : Self.smoothstep((min(travel, shape) - 0.5) / 0.45)
+        closing ? Self.smoothstep(shape / 0.6) : Self.smoothstep((min(travel, shape) - 0.5) / 0.45)
     }
 
     /// 8 pt open, growing with travel and the morph to the mini player's capsule radius.
@@ -256,7 +293,7 @@ private struct CardContent: View {
         ZStack {
             // The card's own background gives way to the bar's glass only in the last part of the cross-fade.
             NowPlayingBackdrop().opacity(1 - Double(CardGeometry.smoothstep((face - 0.7) / 0.3)))
-            NowPlayingView(drawsBackground: false)
+            NowPlayingView(drawsBackground: false, insets: insets)
                 .padding(insets)
                 .opacity(Double(1 - face))
         }
