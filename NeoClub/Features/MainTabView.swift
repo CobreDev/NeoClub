@@ -19,6 +19,8 @@ struct MainTabView: View {
         tabs
             // Now Playing card (Apple Music-style slide-then-collapse into the mini player).
             .overlay { PlayerCardHost() }
+            // The mini player is always there: bring back whatever was playing last (paused).
+            .task { player.restoreLastSession() }
         #if DEBUG
         // Developer convenience: `-debugResumeLast` resumes the most recent episode on launch (progress sync is off in debug).
         .task {

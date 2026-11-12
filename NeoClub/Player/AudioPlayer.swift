@@ -79,7 +79,49 @@ final class AudioPlayer {
             MainActor.assumeIsolated { self?.tick(time) }
         }
         configureRemoteCommands()
+        NotificationCenter.default.addObserver(forName: UIApplication.willResignActiveNotification, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.persistSession() }
+        }
     }
+
+    // MARK: Last session (the mini player is always there, showing what was playing last)
+
+    private struct Session: Codable {
+        let id: String, title: String, album: String?, artwork: String?, groupingID: String?
+        let positionMs: Int, durationMs: Int
+        static let key = "lastSession"
+    }
+    private var lastPersist = Date.distantPast
+
+    /// Saves what's loaded and where, so the next launch can show it in the mini player.
+    private func persistSession() {
+        guard let e = episode else { return }
+        lastPersist = Date()
+        let s = Session(id: e.id, title: e.title, album: e.albumTitle, artwork: e.thumbnailMedium ?? e.thumbnailSmall,
+                        groupingID: groupingID, positionMs: Int(position * 1000),
+                        durationMs: e.mediaLength ?? Int(duration * 1000))
+        UserDefaults.standard.set(try? JSONEncoder().encode(s), forKey: Session.key)
+    }
+
+    /// At launch: show the last episode in the mini player right away, then load it paused where it left off.
+    /// Nothing plays and nothing is synced until Play.
+    func restoreLastSession() {
+        guard episode == nil, let data = UserDefaults.standard.data(forKey: Session.key),
+              let s = try? JSONDecoder().decode(Session.self, from: data) else { return }
+        var json: [String: Any] = ["id": s.id, "name": s.title, "media_length": s.durationMs]
+        if let album = s.album { json["album_name"] = album }
+        if let art = s.artwork { json["thumbnail_medium"] = art; json["thumbnail_small"] = art }
+        guard let raw = try? JSONSerialization.data(withJSONObject: json),
+              let stub = try? JSONDecoder().decode(Episode.self, from: raw) else { return }
+        episode = stub
+        duration = Double(s.durationMs) / 1000
+        position = Double(s.positionMs) / 1000
+        // Where this device left off, unless the account has newer progress (the detail fetch decides).
+        if s.positionMs > 0 { localResume[s.id] = s.positionMs }
+        Task { await load(stub, queue: [], groupingID: s.groupingID, autoplay: false) }
+    }
+    /// Positions saved on this device, used when the account has no in-progress position for the episode.
+    private var localResume: [String: Int] = [:]
 
     // MARK: Public API
 
@@ -124,6 +166,7 @@ final class AudioPlayer {
     func pause() {
         player.pause()
         isPlaying = false
+        persistSession()
         reportProgress()
         updateNowPlaying()
     }
@@ -181,12 +224,13 @@ final class AudioPlayer {
         position = 0
         duration = 0
         showNowPlaying = false
+        UserDefaults.standard.removeObject(forKey: Session.key)
         MPNowPlayingInfoCenter.default().nowPlayingInfo = nil
     }
 
     // MARK: Loading
 
-    private func load(_ item: Episode, queue: [Episode], groupingID: String?) async {
+    private func load(_ item: Episode, queue: [Episode], groupingID: String?, autoplay: Bool = true) async {
         if let current = episode, current.id != item.id { reportProgress() }
         isLoading = true
         errorMessage = nil
@@ -220,7 +264,8 @@ final class AudioPlayer {
             }
 
             try AVAudioSession.sharedInstance().setCategory(.playback, mode: .spokenAudio, policy: .longFormAudio)
-            try AVAudioSession.sharedInstance().setActive(true)
+            // Restoring at launch stays silent: don't take the audio session from other apps until Play.
+            if autoplay { try AVAudioSession.sharedInstance().setActive(true) }
 
             let playerItem = AVPlayerItem(asset: asset)
             playerItem.audioTimePitchAlgorithm = .timeDomain
@@ -233,12 +278,18 @@ final class AudioPlayer {
             duration = Double(detail.mediaLength ?? 0) / 1000
             let saved = progress(for: detail)
             sync.begin(episodeID: detail.id, serverProgress: saved, durationMs: detail.mediaLength ?? 0)
-            let start = Self.resumePoint(saved, durationSeconds: duration)
+            var start = Self.resumePoint(saved, durationSeconds: duration)
+            if let local = localResume.removeValue(forKey: detail.id), !(saved?.isComplete ?? false) {
+                // Restored session: keep this device's place if it's further along than the account's.
+                start = max(start, Self.resumePoint(ListenProgress(status: "In Progress", currentProgress: local),
+                                                    durationSeconds: duration))
+            }
             position = start
             if start > 0 { await player.seek(to: CMTime(seconds: start, preferredTimescale: 600)) }
 
             loadArtwork(detail.artworkURL)
-            resume()
+            persistSession()
+            if autoplay { resume() }
         } catch {
             errorMessage = error.localizedDescription
             isPlaying = false
@@ -273,6 +324,7 @@ final class AudioPlayer {
         if let d = player.currentItem?.duration, d.isNumeric, d.seconds > 0 { duration = d.seconds }
         isPlaying = player.rate > 0 || player.timeControlStatus == .waitingToPlayAtSpecifiedRate
         if isPlaying, sync.shouldReportPeriodically() { reportProgress() }
+        if isPlaying, Date().timeIntervalSince(lastPersist) > 10 { persistSession() }
     }
 
     private func didFinish() {
