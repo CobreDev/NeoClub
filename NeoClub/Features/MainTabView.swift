@@ -299,8 +299,10 @@ struct NowPlayingPresentation: View {
 
     var body: some View {
         let insets = screenInsets
-        NowPlayingView(drawsBackground: true, insets: insets)
+        NowPlayingView(drawsBackground: false, insets: insets)
             .padding(insets)
+            // Edge to edge behind the padded player (there's no system safe area here for it to extend into).
+            .background { NowPlayingBackdrop() }
             .ignoresSafeArea()
             .background(PresentedControllerReader { card.controller = $0 })
         // The system's drag-to-dismiss would shrink the card; the drag below replaces it.

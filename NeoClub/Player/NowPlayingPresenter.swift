@@ -140,13 +140,19 @@ private final class OpenAnimator: NSObject, UIViewControllerAnimatedTransitionin
         card.addSubview(glass)
         container.addSubview(card)
 
+        // A view controller's view resizes with its parent by default; inside the growing card that made the player
+        // grow by the card's growth on top of its full size (SwiftUI laid it out too tall, contents off the card).
+        let mask = toView.autoresizingMask
+        toView.autoresizingMask = []
         toView.frame = full
         toView.layer.anchorPoint = CGPoint(x: 0.5, y: 0)
         let s0 = start.width / max(1, full.width)
         toView.transform = CGAffineTransform(scaleX: s0, y: s0)
         toView.center = CGPoint(x: start.width / 2, y: 0)
-        toView.alpha = 0
         card.addSubview(toView)
+        // The glass sits over the player and fades off it (fading the player itself in left SwiftUI not drawing its
+        // contents until the transition ended).
+        card.bringSubviewToFront(glass)
 
         let animator = UIViewPropertyAnimator(duration: 0, timingParameters: Self.spring)
         animator.addAnimations {
@@ -157,12 +163,13 @@ private final class OpenAnimator: NSObject, UIViewControllerAnimatedTransitionin
             dim.alpha = 0.12
         }
         // The player fills in over the glass quickly, as Music's content does.
-        UIView.animate(withDuration: 0.12, delay: 0.03, options: [.curveEaseOut]) { toView.alpha = 1 }
+        UIView.animate(withDuration: 0.12, delay: 0.03, options: [.curveEaseOut]) { glass.alpha = 0 }
         animator.addCompletion { _ in
             // Hand the presented view back to the container at full screen; drop the scaffolding.
             toView.layer.anchorPoint = CGPoint(x: 0.5, y: 0.5)
             toView.transform = .identity
             toView.frame = full
+            toView.autoresizingMask = mask
             container.addSubview(toView)
             card.removeFromSuperview()
             dim.removeFromSuperview()
