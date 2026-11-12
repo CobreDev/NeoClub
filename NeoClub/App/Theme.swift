@@ -95,8 +95,8 @@ struct AIOBackground: View {
             Color.clear
                 .frame(height: 520)
                 .overlay {
-                    AsyncImage(url: artworkURL) { $0.resizable().scaledToFill() } placeholder: { Color.clear }
-                        .blur(radius: 50)
+                    // Blurred once from a 64 px copy instead of a live 50 pt blur over the full cover.
+                    BlurredArtwork(url: artworkURL, radius: 10)
                         .opacity(0.75)
                 }
                 .clipped()

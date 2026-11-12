@@ -1,7 +1,16 @@
 import SwiftUI
 
+/// Receives iOS's relaunch for finished background downloads.
+final class AppDelegate: NSObject, UIApplicationDelegate {
+    func application(_ application: UIApplication, handleEventsForBackgroundURLSession identifier: String,
+                     completionHandler: @escaping () -> Void) {
+        MainActor.assumeIsolated { DownloadStore.shared.handleBackgroundEvents(completionHandler) }
+    }
+}
+
 @main
 struct NeoClubApp: App {
+    @UIApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @State private var app = AppModel()
     @State private var player = AudioPlayer.shared
     @State private var downloads = DownloadStore.shared
@@ -54,7 +63,39 @@ final class AppModel {
 
     func bootstrap() async {
         guard await AuthService.shared.isSignedIn else { phase = .signedOut; return }
+        // Open straight into the last profile from the saved list (no spinner while /viewer loads, and it works
+        // offline); the list is refreshed behind it.
+        if let saved = AIOService.cachedProfiles(), !saved.isEmpty {
+            profiles = saved
+            if restoreSavedProfile() {
+                Task { await refreshProfiles() }
+                return
+            }
+        }
         await loadProfiles()
+    }
+
+    /// Activates the last profile if it's in `profiles` and needs no PIN (or its PIN is remembered).
+    private func restoreSavedProfile() -> Bool {
+        guard let saved = UserDefaults.standard.string(forKey: Self.profileKey),
+              let match = profiles.first(where: { $0.viewerID == saved }),
+              !match.hasPIN || Keychain.get(Self.pinKey(match.viewerID)) != nil else { return false }
+        activate(match, pin: Keychain.get(Self.pinKey(match.viewerID)).map { String(decoding: $0, as: UTF8.self) })
+        return true
+    }
+
+    /// Updates the profile list quietly; if the active profile is gone, asks to choose again.
+    private func refreshProfiles() async {
+        let previous = APIClient.shared.viewerID
+        APIClient.shared.viewerID = nil
+        let fresh = try? await AIOService.profiles()
+        APIClient.shared.viewerID = previous
+        guard let fresh else { return }
+        profiles = fresh
+        if let profile, !fresh.contains(where: { $0.viewerID == profile.viewerID }) {
+            AudioPlayer.shared.stop()
+            phase = .choosingProfile
+        }
     }
 
     func didSignIn() async {
@@ -66,13 +107,7 @@ final class AppModel {
             profiles = try await AIOService.profiles()
             profileError = nil
             // Restore the last profile if it needs no PIN, or its PIN is remembered.
-            if let saved = UserDefaults.standard.string(forKey: Self.profileKey),
-               let match = profiles.first(where: { $0.viewerID == saved }),
-               !match.hasPIN || Keychain.get(Self.pinKey(match.viewerID)) != nil {
-                activate(match, pin: Keychain.get(Self.pinKey(match.viewerID)).map { String(decoding: $0, as: UTF8.self) })
-            } else {
-                phase = .choosingProfile
-            }
+            if !restoreSavedProfile() { phase = .choosingProfile }
         } catch AuthError.notSignedIn {
             phase = .signedOut
         } catch {
@@ -101,6 +136,7 @@ final class AppModel {
         await AuthService.shared.signOut()
         APIClient.shared.viewerID = nil
         APIClient.shared.viewerPIN = nil
+        ResponseCache.clear()
         for p in profiles { Keychain.set(nil, for: Self.pinKey(p.viewerID)) }
         UserDefaults.standard.removeObject(forKey: Self.profileKey)
         profile = nil

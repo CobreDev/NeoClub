@@ -55,21 +55,26 @@ struct HomeView: View {
             .sharedBackgroundVisibility(.hidden)
         }
         .sheet(isPresented: $showAccount) { AccountView() }
-        .refreshable { await load() }
+        .refreshable { await load(force: true) }
         .task { if home == nil { await load() } }
     }
 
-    private func load() async {
+    /// `force` (pull to refresh) also refetches the album catalog behind Next Up.
+    private func load(force: Bool = false) async {
+        // The last copy saved on this device shows at once; the fresh one replaces it when it arrives.
+        if home == nil { home = AIOService.cachedHome() }
         async let marks: Void = bookmarks.load()
         do {
             home = try await AIOService.home()
             error = nil
             let continuing = home?.playlists?.first { $0.name?.hasPrefix("Continue where you left off") == true }
-            await nextUp.refresh(continuing: continuing?.contentList ?? [], history: player.history.map { ($0.id, $0.playedAt) }) {
+            await nextUp.refresh(continuing: continuing?.contentList ?? [], history: player.history.map { ($0.id, $0.playedAt) },
+                                 force: force) {
                 player.progress(for: $0)?.isComplete ?? false
             }
         } catch {
-            self.error = error.localizedDescription
+            // Keep showing the saved copy when offline; only show the error when there's nothing to show.
+            self.error = home == nil ? error.localizedDescription : nil
         }
         await marks
     }
@@ -142,7 +147,7 @@ private struct CarouselView: View {
                     let card = Color.clear
                         .aspectRatio(16 / 7, contentMode: .fit)
                         .overlay {
-                            AsyncImage(url: .aio(item.imageUrl)) { $0.resizable().scaledToFill() } placeholder: {
+                            CachedImage(url: .aio(item.imageUrl)) {
                                 LinearGradient(colors: [.aioOcean, .aioNavy], startPoint: .top, endPoint: .bottom)
                             }
                         }
@@ -242,12 +247,29 @@ private struct BookmarksShelf: View {
 final class NextUpStore {
     static let shared = NextUpStore()
     private(set) var episodes: [Episode] = []
-    /// Every numbered episode in every album, in broadcast order. Loaded once per launch.
+    /// Every numbered episode in every album, in broadcast order. Fetched at most once an hour (the saved copy on
+    /// this device is used in between, and shown instantly at launch while a stale one refreshes).
     private var catalog: [Episode] = []
+    private var catalogFresh = false
     private var lastSeeds: [String] = []
+    static let catalogMaxAge: TimeInterval = 3600
 
-    func refresh(continuing: [Episode], history: [(id: String, at: Date)], isDone: (Episode) -> Bool) async {
-        if catalog.isEmpty { catalog = await Self.loadCatalog() }
+    func refresh(continuing: [Episode], history: [(id: String, at: Date)], force: Bool = false,
+                 isDone: (Episode) -> Bool) async {
+        if force { catalogFresh = false }
+        if catalog.isEmpty, let saved = Self.savedCatalog() {
+            catalog = saved.episodes
+            catalogFresh = saved.age < Self.catalogMaxAge
+            compute(continuing: continuing, history: history, isDone: isDone)
+        }
+        if !catalogFresh {
+            let fresh = await Self.loadCatalog()
+            if !fresh.isEmpty { catalog = fresh; catalogFresh = true }
+        }
+        compute(continuing: continuing, history: history, isDone: isDone)
+    }
+
+    private func compute(continuing: [Episode], history: [(id: String, at: Date)], isDone: (Episode) -> Bool) {
         guard !catalog.isEmpty else { return }
         // The most recent listens, from the account (album progress timestamps) and from this app (its history),
         // newest first.
@@ -267,7 +289,13 @@ final class NextUpStore {
         }
         lastSeeds = seeds
 
-        let inProgress = Set(continuing.map(\.id))
+        episodes = Self.nextEpisodes(catalog: catalog, seeds: seeds, inProgress: Set(continuing.map(\.id)), isDone: isDone)
+    }
+
+    /// For each recently heard episode (newest first), the first later episode in broadcast order that isn't
+    /// finished, started, or in Continue Listening; no duplicates.
+    static func nextEpisodes(catalog: [Episode], seeds: [String], inProgress: Set<String>,
+                             isDone: (Episode) -> Bool) -> [Episode] {
         var next: [Episode] = []
         for seed in seeds {
             guard let i = catalog.firstIndex(where: { $0.id == seed }) else { continue }
@@ -276,7 +304,7 @@ final class NextUpStore {
             }
             if let candidate, !next.contains(where: { $0.id == candidate.id }) { next.append(candidate) }
         }
-        episodes = next
+        return next
     }
 
     /// All album pages (the same requests the Albums grid makes), flattened into broadcast order.
@@ -289,6 +317,26 @@ final class NextUpStore {
             pages = r.metadata?.totalPageCount ?? page
             page += 1
         } while page <= pages && page <= 10
+        return ordered(all)
+    }
+
+    /// The catalog from the album pages saved on this device, if they're all there, with the oldest page's age.
+    private static func savedCatalog() -> (episodes: [Episode], age: TimeInterval)? {
+        var all: [Episode] = []
+        var page = 1, pages = 1, oldest: TimeInterval = 0
+        repeat {
+            guard let (r, age) = AIOService.cachedGroupings(type: "Album", page: page, pageSize: 25) else { return nil }
+            for g in r.contentGroupings ?? [] { all += g.contentList }
+            pages = r.metadata?.totalPageCount ?? page
+            oldest = max(oldest, age)
+            page += 1
+        } while page <= pages && page <= 10
+        let episodes = ordered(all)
+        return episodes.isEmpty ? nil : (episodes, oldest)
+    }
+
+    /// Numbered episodes only, deduplicated, in broadcast order.
+    static func ordered(_ all: [Episode]) -> [Episode] {
         var seen = Set<String>()
         return all
             .filter { seen.insert($0.id).inserted }

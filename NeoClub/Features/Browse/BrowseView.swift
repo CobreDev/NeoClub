@@ -160,12 +160,18 @@ final class BrowseStore {
     func load() async {
         guard !loaded else { return }
         loaded = true
+        // Saved copies first, so the page is filled at once (and offline); fresh ones replace them below.
+        if newAlbums.isEmpty, let saved = AIOService.cachedGroupings(type: "Album", page: 1)?.value.contentGroupings {
+            applyAlbums(saved)
+        }
+        for c in BrowseView.categories where c.type != "Album" && covers[c.id] == nil {
+            if let saved = AIOService.cachedGroupings(type: c.type, page: 1, pageSize: 3)?.value.contentGroupings {
+                covers[c.id] = saved.compactMap(\.artworkURL)
+            }
+        }
         // Albums: one page feeds the New Albums shelf and both album cards.
         if let albums = try? await AIOService.groupings(type: "Album", page: 1).contentGroupings {
-            let regular = albums.filter { GroupingFilter.regularAlbums.includes($0) }
-            newAlbums = Array(regular.prefix(12))
-            covers["Album-regularAlbums"] = regular.compactMap(\.artworkURL)
-            covers["Album-clubAlbums"] = albums.filter { GroupingFilter.clubAlbums.includes($0) }.compactMap(\.artworkURL)
+            applyAlbums(albums)
         } else {
             loaded = false
         }
@@ -176,8 +182,15 @@ final class BrowseStore {
                     return (c.id, list.compactMap(\.artworkURL))
                 }
             }
-            for await (id, urls) in group { covers[id] = urls }
+            for await (id, urls) in group where !urls.isEmpty { covers[id] = urls }
         }
+    }
+
+    private func applyAlbums(_ albums: [Grouping]) {
+        let regular = albums.filter { GroupingFilter.regularAlbums.includes($0) }
+        newAlbums = Array(regular.prefix(12))
+        covers["Album-regularAlbums"] = regular.compactMap(\.artworkURL)
+        covers["Album-clubAlbums"] = albums.filter { GroupingFilter.clubAlbums.includes($0) }.compactMap(\.artworkURL)
     }
 }
 

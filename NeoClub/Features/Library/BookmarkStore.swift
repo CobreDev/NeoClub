@@ -21,6 +21,8 @@ final class BookmarkStore {
     }
 
     func load() async {
+        // The saved list shows at once (and offline); the fresh one replaces it.
+        if items.isEmpty, let saved = AIOService.cachedBookmarks() { items = saved }
         do {
             items = try await AIOService.bookmarks()
             overrides = [:]

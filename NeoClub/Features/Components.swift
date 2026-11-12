@@ -36,14 +36,10 @@ struct Artwork: View {
         Color.clear
             .aspectRatio(1, contentMode: .fit)
             .overlay {
-                AsyncImage(url: url, transaction: Transaction(animation: .easeOut(duration: 0.2))) { phase in
-                    if let image = phase.image {
-                        image.resizable().scaledToFill()
-                    } else {
-                        ZStack {
-                            LinearGradient(colors: [.aioOcean, .aioNavy], startPoint: .topLeading, endPoint: .bottomTrailing)
-                            Image(systemName: "headphones").font(.title).foregroundStyle(.white.opacity(0.5))
-                        }
+                CachedImage(url: url) {
+                    ZStack {
+                        LinearGradient(colors: [.aioOcean, .aioNavy], startPoint: .topLeading, endPoint: .bottomTrailing)
+                        Image(systemName: "headphones").font(.title).foregroundStyle(.white.opacity(0.5))
                     }
                 }
             }
@@ -308,6 +304,16 @@ extension View {
 /// One line of text that scrolls when it doesn't fit, like Apple Music's Now Playing titles: it rests for a few
 /// seconds, glides left at a steady pace until a second copy has taken the first one's place, and repeats. Text
 /// that fits just sits still.
+private struct IsOnScreenKey: EnvironmentKey { static let defaultValue = true }
+extension EnvironmentValues {
+    /// False while a view is kept mounted but hidden (the Now Playing card behind the mini player), so it can skip
+    /// animations and per-second updates.
+    var isOnScreen: Bool {
+        get { self[IsOnScreenKey.self] }
+        set { self[IsOnScreenKey.self] = newValue }
+    }
+}
+
 struct MarqueeText: View {
     let text: String
     let font: Font
@@ -322,6 +328,9 @@ struct MarqueeText: View {
 
     @State private var fullWidth: CGFloat = 0
     @State private var boxWidth: CGFloat = 0
+    /// Off while the view is hidden (e.g. the Now Playing card behind the mini player): no animation runs, and
+    /// coming back on screen starts the scroll over from the beginning.
+    @Environment(\.isOnScreen) private var isOnScreen
     /// When the current cycle began; the position is computed from it, so restarting is just a reset.
     @State private var start = Date()
 
@@ -339,6 +348,29 @@ struct MarqueeText: View {
             }
             .overlay(alignment: .leading) {
                 let distance = fullWidth + gap
+                if isOnScreen {
+                    scrolling(distance: distance)
+                } else {
+                    Text(text).font(font).fixedSize()
+                }
+            }
+            .clipped()
+            .mask {
+                if overflows {
+                    HStack(spacing: 0) {
+                        Color.black
+                        LinearGradient(colors: [.black, .clear], startPoint: .leading, endPoint: .trailing).frame(width: 16)
+                    }
+                } else {
+                    Color.black
+                }
+            }
+            .onChange(of: restartKey) { start = Date() }
+            .onChange(of: text) { start = Date() }
+            .accessibilityLabel(text)
+    }
+
+    private func scrolling(distance: CGFloat) -> some View {
                 HStack(spacing: gap) {
                     Text(text).font(font).fixedSize()
                     if overflows { Text(text).font(font).fixedSize() }
@@ -362,21 +394,6 @@ struct MarqueeText: View {
                     }
                 }
                 .id(start)
-            }
-            .clipped()
-            .mask {
-                if overflows {
-                    HStack(spacing: 0) {
-                        Color.black
-                        LinearGradient(colors: [.black, .clear], startPoint: .leading, endPoint: .trailing).frame(width: 16)
-                    }
-                } else {
-                    Color.black
-                }
-            }
-            .onChange(of: restartKey) { start = Date() }
-            .onChange(of: text) { start = Date() }
-            .accessibilityLabel(text)
     }
 }
 

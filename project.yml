@@ -35,3 +35,28 @@ targets:
         UIBackgroundModes: [audio]
         UIAppFonts: [JacobyICGBlack.ttf, UniversRegular.ttf, UniversBold.ttf]
         UIUserInterfaceStyle: Automatic
+  NeoClubTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: NeoClubTests
+    dependencies:
+      - target: NeoClub
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        PRODUCT_BUNDLE_IDENTIFIER: com.cooperhull.neoclub.tests
+schemes:
+  NeoClub:
+    build:
+      targets:
+        NeoClub: all
+        NeoClubTests: [test]
+    run:
+      config: Debug
+    test:
+      config: Debug
+      targets:
+        - NeoClubTests
+    archive:
+      config: Release

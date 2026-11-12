@@ -97,7 +97,7 @@ struct ProfileBadge: View {
             ZStack {
                 Circle().fill(Self.palette[profile.viewerID.unicodeScalars.reduce(0) { $0 + Int($1.value) } % Self.palette.count].gradient)
                 if let url = profile.pictureURL {
-                    AsyncImage(url: url) { $0.resizable().scaledToFill() } placeholder: { initials }
+                    CachedImage(url: url) { initials }
                         .clipShape(Circle())
                 } else {
                     initials

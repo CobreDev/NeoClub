@@ -282,6 +282,8 @@ private struct CardContent: View {
             NowPlayingBackdrop().opacity(1 - Double(CardGeometry.smoothstep((face - 0.7) / 0.3)))
             NowPlayingView(drawsBackground: false, insets: insets)
                 .padding(insets)
+                // Hidden behind the mini player it stays mounted (so opening is instant) but idle.
+                .environment(\.isOnScreen, PlayerCardModel.shared.visible)
                 .opacity(Double(1 - face))
         }
     }

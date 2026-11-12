@@ -8,6 +8,14 @@ enum AIOService {
         try await api.get("/viewer", as: ProfilesResponse.self).profiles
     }
 
+    /// The profile list saved from the last launch (fetched before a profile is chosen).
+    static func cachedProfiles() -> [Profile]? {
+        let previous = api.viewerID
+        api.viewerID = nil
+        defer { api.viewerID = previous }
+        return api.cached("GET", "/viewer", as: ProfilesResponse.self)?.value.profiles
+    }
+
     /// Checks a profile PIN the same way the official app does (headers on GET /viewer/verifyPIN).
     static func verifyPIN(_ pin: String, for viewerID: String) async -> Bool {
         let previous = (api.viewerID, api.viewerPIN)
@@ -17,11 +25,18 @@ enum AIOService {
         return (try? await api.raw("GET", "/viewer/verifyPIN")) != nil
     }
 
+    private static let homeQuery: [String: String?] = [
+        "carousel": "true", "where_you_left_off": "true", "playlists": "true",
+        "personal_playlists": "true", "odyssey_times": "true", "notifications": "true",
+    ]
+
     static func home() async throws -> HomeResponse {
-        try await api.get("/viewer/home", query: [
-            "carousel": "true", "where_you_left_off": "true", "playlists": "true",
-            "personal_playlists": "true", "odyssey_times": "true", "notifications": "true",
-        ])
+        try await api.get("/viewer/home", query: homeQuery)
+    }
+
+    /// The last Home response saved on this device, shown while the fresh one loads.
+    static func cachedHome() -> HomeResponse? {
+        api.cached("GET", "/viewer/home", query: homeQuery, as: HomeResponse.self)?.value
     }
 
     /// Full episode detail including signed stream/download URLs.
@@ -44,6 +59,12 @@ enum AIOService {
 
     static func groupings(type: String, page: Int, pageSize: Int = 24) async throws -> GroupingsResponse {
         try await api.post("/contentgrouping/search", body: GroupingSearch(type: type, pageNumber: page, pageSize: pageSize))
+    }
+
+    /// A saved copy of that page, with its age in seconds.
+    static func cachedGroupings(type: String, page: Int, pageSize: Int = 24) -> (value: GroupingsResponse, age: TimeInterval)? {
+        api.cached("POST", "/contentgrouping/search", body: GroupingSearch(type: type, pageNumber: page, pageSize: pageSize),
+                   as: GroupingsResponse.self)
     }
 
     private struct SearchRequest: Encodable {
@@ -102,11 +123,16 @@ enum AIOService {
 
     // MARK: Bookmarks (like the official app: GET /content/search?is_bookmarked, POST/DELETE /bookmark)
 
+    private static func bookmarksQuery(_ page: Int) -> [String: String?] {
+        ["community": "Adventures in Odyssey", "is_bookmarked": "true", "pagenum": String(page), "pagecount": "50"]
+    }
+
     static func bookmarks(page: Int = 1) async throws -> [Episode] {
-        try await api.get("/content/search", query: [
-            "community": "Adventures in Odyssey", "is_bookmarked": "true",
-            "pagenum": String(page), "pagecount": "50",
-        ], as: ContentSearchResponse.self).results ?? []
+        try await api.get("/content/search", query: bookmarksQuery(page), as: ContentSearchResponse.self).results ?? []
+    }
+
+    static func cachedBookmarks(page: Int = 1) -> [Episode]? {
+        api.cached("GET", "/content/search", query: bookmarksQuery(page), as: ContentSearchResponse.self)?.value.results
     }
 
     private struct BookmarkRequest: Encodable {

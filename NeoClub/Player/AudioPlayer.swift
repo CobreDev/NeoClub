@@ -16,7 +16,7 @@ final class AudioPlayer {
     private(set) var duration: Double = 0
     private(set) var errorMessage: String?
     var rate: Float = 1.0 { didSet { if isPlaying { player.rate = rate } } }
-    var showNowPlaying = false
+    var showNowPlaying = false { didSet { if showNowPlaying { startPendingRestore() } } }
     /// Album/collection the current episode was started from (for "Go to Album").
     private(set) var groupingID: String?
     /// Recently played episodes, newest first, persisted across launches.
@@ -137,7 +137,26 @@ final class AudioPlayer {
         position = Double(s.positionMs) / 1000
         // Where this device left off, unless the account has newer progress (the detail fetch decides).
         if s.positionMs > 0 { localResume[s.id] = s.positionMs }
-        Task { await load(stub, queue: [], groupingID: s.groupingID, autoplay: false) }
+        // The mini player is filled in now (artwork from the image cache); loading the episode itself (an API
+        // request and the audio) waits until after launch, or until it's needed (Play, or opening Now Playing).
+        loadArtwork(stub.artworkURL)
+        pendingRestore = (stub, s.groupingID)
+        restoreTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(2))
+            guard !Task.isCancelled else { return }
+            self?.startPendingRestore()
+        }
+    }
+
+    private var pendingRestore: (episode: Episode, groupingID: String?)?
+    private var restoreTask: Task<Void, Never>?
+
+    /// Loads the restored episode now, paused (or playing, for Play), if it hasn't been yet.
+    private func startPendingRestore(autoplay: Bool = false) {
+        guard let pending = pendingRestore else { return }
+        pendingRestore = nil
+        restoreTask?.cancel()
+        Task { await load(pending.episode, queue: [], groupingID: pending.groupingID, autoplay: autoplay) }
     }
     /// Positions saved on this device, used when the account has no in-progress position for the episode.
     private var localResume: [String: Int] = [:]
@@ -241,6 +260,8 @@ final class AudioPlayer {
 
     func resume() {
         guard episode != nil else { return }
+        // Play pressed on the restored mini player before its episode finished loading: load it and play.
+        if pendingRestore != nil { startPendingRestore(autoplay: true); return }
         try? AVAudioSession.sharedInstance().setActive(true)
         player.playImmediately(atRate: rate)
         isPlaying = true
@@ -296,6 +317,9 @@ final class AudioPlayer {
     }
 
     func stop() {
+        pendingRestore = nil
+        restoreTask?.cancel()
+        prefetched = nil
         if episode != nil { reportProgress() }
         player.pause()
         player.replaceCurrentItem(with: nil)
@@ -324,7 +348,11 @@ final class AudioPlayer {
             let local = DownloadStore.shared.localFile(for: item.id)
             // Detail gives signed stream URLs and the authoritative saved position for this profile.
             let detail: Episode
-            if let fetched = try? await AIOService.episode(item.id, groupingID: groupingID) {
+            let ready = prefetched?.id == item.id ? prefetched : nil
+            prefetched = nil
+            if let ready {
+                detail = ready.detail
+            } else if let fetched = try? await AIOService.episode(item.id, groupingID: groupingID) {
                 detail = fetched
             } else if local != nil, let cached = DownloadStore.shared.episode(for: item.id) {
                 detail = cached
@@ -335,12 +363,7 @@ final class AudioPlayer {
             episode = detail
             recordHistory(detail)
 
-            let asset: AVURLAsset
-            if let local {
-                asset = AVURLAsset(url: local)
-            } else if let stream = URL.aio(detail.streamURL) {
-                asset = AVURLAsset(url: stream, options: [AVURLAssetHTTPCookiesKey: Self.cloudFrontCookies(from: detail.signedCookie)])
-            } else {
+            guard let asset = ready?.asset ?? Self.makeAsset(detail, local: local) else {
                 throw APIError.decoding("This episode isn't available to stream.")
             }
 
@@ -377,6 +400,39 @@ final class AudioPlayer {
         }
     }
 
+    private static func makeAsset(_ detail: Episode, local: URL?) -> AVURLAsset? {
+        if let local { return AVURLAsset(url: local) }
+        guard let stream = URL.aio(detail.streamURL) else { return nil }
+        return AVURLAsset(url: stream, options: [AVURLAssetHTTPCookiesKey: cloudFrontCookies(from: detail.signedCookie)])
+    }
+
+    // MARK: Preloading the next episode
+
+    /// The next queued episode's details and audio, fetched shortly before the current one ends so it starts
+    /// without a gap.
+    private var prefetched: (id: String, detail: Episode, asset: AVURLAsset)?
+    private var prefetchTask: Task<Void, Never>?
+
+    private func prefetchNextIfNeeded() {
+        guard isPlaying, duration > 0, duration - position < 45, let next = queue.first,
+              prefetched?.id != next.id, prefetchTask == nil else { return }
+        let grouping = groupingID
+        prefetchTask = Task { [weak self] in
+            defer { self?.prefetchTask = nil }
+            let local = DownloadStore.shared.localFile(for: next.id)
+            let detail: Episode? = if let fetched = try? await AIOService.episode(next.id, groupingID: grouping) {
+                fetched
+            } else if local != nil {
+                DownloadStore.shared.episode(for: next.id)
+            } else {
+                nil
+            }
+            guard let detail, let asset = Self.makeAsset(detail, local: local) else { return }
+            _ = try? await asset.load(.isPlayable)
+            self?.prefetched = (next.id, detail, asset)
+        }
+    }
+
     /// Resume where the profile left off; finished (or nearly finished) episodes start over.
     static func resumePoint(_ progress: ListenProgress?, durationSeconds: Double) -> Double {
         guard let progress, progress.isInProgress, let ms = progress.currentProgress else { return 0 }
@@ -401,11 +457,14 @@ final class AudioPlayer {
 
     private func tick(_ time: CMTime) {
         guard episode != nil else { return }
-        if time.isNumeric { position = time.seconds }
-        if let d = player.currentItem?.duration, d.isNumeric, d.seconds > 0 { duration = d.seconds }
-        isPlaying = player.rate > 0 || player.timeControlStatus == .waitingToPlayAtSpecifiedRate
+        // Only set what changed: every set of an observed property redraws everything that reads it.
+        if time.isNumeric, time.seconds != position { position = time.seconds }
+        if let d = player.currentItem?.duration, d.isNumeric, d.seconds > 0, d.seconds != duration { duration = d.seconds }
+        let playing = player.rate > 0 || player.timeControlStatus == .waitingToPlayAtSpecifiedRate
+        if playing != isPlaying { isPlaying = playing }
         if isPlaying, sync.shouldReportPeriodically() { reportProgress() }
         if isPlaying, Date().timeIntervalSince(lastPersist) > 10 { persistSession() }
+        prefetchNextIfNeeded()
     }
 
     private func didFinish() {
@@ -468,7 +527,7 @@ final class AudioPlayer {
         artworkImage = nil
         guard let url else { return }
         Task {
-            guard let (data, _) = try? await URLSession.shared.data(from: url), let image = UIImage(data: data) else { return }
+            guard let image = await ImagePipeline.shared.image(url, pixels: 1024) else { return }
             artworkImage = image
             artwork = MPMediaItemArtwork(boundsSize: image.size) { _ in image }
             updateNowPlaying()

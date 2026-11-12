@@ -15,7 +15,7 @@ struct CharacterView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 22) {
                 VStack(spacing: 12) {
-                    AsyncImage(url: shown?.largeURL) { $0.resizable().scaledToFill() } placeholder: { Color.white.opacity(0.12) }
+                    CachedImage(url: shown?.largeURL) { Color.white.opacity(0.12) }
                         .frame(width: 180, height: 180)
                         .clipShape(Circle())
                         .overlay(Circle().stroke(.white.opacity(0.85), lineWidth: 3))
@@ -104,7 +104,7 @@ struct AuthorView: View {
     var body: some View {
         ScrollView {
             VStack(spacing: 16) {
-                AsyncImage(url: shown?.imageURL) { $0.resizable().scaledToFill() } placeholder: {
+                CachedImage(url: shown?.imageURL) {
                     Image(systemName: "person.fill").font(.system(size: 64)).foregroundStyle(.white.opacity(0.5))
                         .frame(maxWidth: .infinity, maxHeight: .infinity).background(Color.white.opacity(0.12))
                 }
@@ -153,7 +153,7 @@ struct PersonChip: View {
 
     var body: some View {
         VStack(spacing: 6) {
-            AsyncImage(url: imageURL) { $0.resizable().scaledToFill() } placeholder: {
+            CachedImage(url: imageURL) {
                 Image(systemName: "person.fill").foregroundStyle(.white.opacity(0.5))
                     .frame(maxWidth: .infinity, maxHeight: .infinity).background(Color.white.opacity(0.12))
             }
