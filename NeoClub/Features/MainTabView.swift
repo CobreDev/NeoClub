@@ -36,7 +36,8 @@ struct MainTabView: View {
         for (key, routes) in state.paths {
             if let id = TabID(rawValue: key) { paths[id] = routes.compactMap(\.route) }
         }
-        if state.nowPlayingOpen && player.hasItem { player.showNowPlaying = true }
+        // Now Playing isn't reopened after a relaunch: the app starts on the mini player (`nowPlayingOpen` is
+        // still saved, but only for older builds' sake).
     }
 
     var body: some View {
