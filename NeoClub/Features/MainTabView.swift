@@ -271,11 +271,21 @@ private struct ZoomSource: ViewModifier {
     }
 }
 
-/// Now Playing as a full-screen presentation (the system zoom transition draws the card, its springs, the drag to
-/// dismiss and the landing in the bar). Laid out edge to edge with the screen's insets passed in, as on the card.
+/// Now Playing as a full-screen presentation (the system zoom transition draws the card, its springs and the landing
+/// in the bar). Laid out edge to edge with the screen's insets passed in, as on the card.
+///
+/// Dragging down works like Apple Music rather than the system zoom's own drag (which shrinks the card under the
+/// finger): the card slides down at full size, 1:1 with the finger, and only morphs into the bar when it's let go.
+/// Music does this by moving the card's container (`UIDropShadowView`) during the drag and starting the landing from
+/// wherever it was released (traced 2026-11-12); this does the same with the presentation's container.
 struct NowPlayingPresentation: View {
     static let nativeKey = "nativeNowPlayingTransition"
     static let sourceID = "miniPlayer"
+
+    @Environment(AudioPlayer.self) private var player
+    @State private var card = PresentedCard()
+    /// Touch slop before the card starts to follow (UIKit's).
+    private let slop: CGFloat = 12
 
     var body: some View {
         GeometryReader { geo in
@@ -283,5 +293,98 @@ struct NowPlayingPresentation: View {
                 .padding(geo.safeAreaInsets)
         }
         .ignoresSafeArea()
+        .background(PresentedControllerReader { card.controller = $0 })
+        // The system's drag-to-dismiss would shrink the card; the drag below replaces it.
+        .interactiveDismissDisabled()
+        .gesture(DragGesture(minimumDistance: slop, coordinateSpace: .global)
+            .onChanged { v in
+                guard v.translation.height > 0, abs(v.translation.height) > abs(v.translation.width) || card.dragging else { return }
+                card.follow(max(0, v.translation.height - slop))
+            }
+            .onEnded { v in
+                guard card.dragging else { return }
+                let distance = v.translation.height - slop
+                if distance > 140 || v.velocity.height > 500 {
+                    // Hand over to the system dismissal from where the card is now: it lands in the bar from here.
+                    card.release()
+                    player.showNowPlaying = false
+                } else {
+                    card.snapBack()
+                }
+            })
+    }
+}
+
+/// The presented card's container view, moved directly during the drag (as Apple Music moves its `UIDropShadowView`).
+@MainActor
+final class PresentedCard {
+    weak var controller: UIViewController?
+    private(set) var dragging = false
+    private var restCenter: CGPoint?
+
+    /// The view the zoom transition animates: the presentation's outermost container under the transition view.
+    private var container: UIView? {
+        guard var v = controller?.view else { return nil }
+        while let s = v.superview, !(String(describing: type(of: s)).contains("TransitionView")), !(s is UIWindow) { v = s }
+        return v
+    }
+
+    /// Apple Music's card corner while it's dragged (traced: the card's corner radii are 14.16 pt at release, then
+    /// animate to the bar's 24 pt as it lands).
+    static let dragCornerRadius: CGFloat = 14.16
+
+    func follow(_ dy: CGFloat) {
+        guard let c = container else { return }
+        if !dragging {
+            dragging = true
+            restCenter = c.center
+            c.layer.cornerCurve = .continuous
+            c.layer.masksToBounds = true
+            UIView.animate(withDuration: 0.15) { c.layer.cornerRadius = Self.dragCornerRadius }
+        }
+        guard let rest = restCenter else { return }
+        c.center = CGPoint(x: rest.x, y: rest.y + dy)
+    }
+
+    /// Finger lifted to dismiss: leave the card where it is (the dismissal animates from its current frame).
+    func release() {
+        dragging = false
+        restCenter = nil
+    }
+
+    /// Finger lifted without dismissing: back up on Apple Music's critically damped spring.
+    func snapBack() {
+        guard let c = container, let rest = restCenter else { dragging = false; return }
+        dragging = false
+        restCenter = nil
+        UIView.animate(springDuration: 0.3441, bounce: 0) {
+            c.center = rest
+            c.layer.cornerRadius = 0
+        }
+    }
+}
+
+/// Hands back the view controller that hosts this view (the presented Now Playing controller).
+private struct PresentedControllerReader: UIViewControllerRepresentable {
+    let found: (UIViewController) -> Void
+    func makeUIViewController(context: Context) -> Probe { Probe(found: found) }
+    func updateUIViewController(_ uiViewController: Probe, context: Context) {}
+
+    final class Probe: UIViewController {
+        let found: (UIViewController) -> Void
+        init(found: @escaping (UIViewController) -> Void) { self.found = found; super.init(nibName: nil, bundle: nil) }
+        required init?(coder: NSCoder) { fatalError() }
+        override func didMove(toParent parent: UIViewController?) {
+            super.didMove(toParent: parent)
+            var top: UIViewController? = parent
+            while let p = top?.parent { top = p }
+            if let top { found(top) }
+        }
+        override func viewDidAppear(_ animated: Bool) {
+            super.viewDidAppear(animated)
+            var top: UIViewController = self
+            while let p = top.parent { top = p }
+            found(top)
+        }
     }
 }

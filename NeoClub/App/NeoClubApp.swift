@@ -65,7 +65,11 @@ final class AppModel {
         #if DEBUG
         // `-debugUIOnly`: the app's screens with a placeholder episode in the mini player, no account and no
         // network, for testing transitions in the simulator.
-        if ProcessInfo.processInfo.arguments.contains("-debugUIOnly") {
+        var uiOnly = ProcessInfo.processInfo.arguments.contains("-debugUIOnly")
+        #if FORCE_UI_ONLY
+        uiOnly = true  // vphone test builds (the VM can't pass launch arguments)
+        #endif
+        if uiOnly {
             AudioPlayer.shared.debugLoadPlaceholder()
             phase = .ready
             return
