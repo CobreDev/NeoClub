@@ -91,17 +91,20 @@ struct BrowseView: View {
 private struct CategoryCard: View {
     let category: BrowseView.Category
     let covers: [URL]
+    /// The title's size, so the blur covers all of it.
+    @State private var titleSize: CGSize = .zero
 
     var body: some View {
         ZStack(alignment: .topLeading) {
             artwork
-            // The same art, blurred, revealed only around the title's corner.
+            // The same art, blurred, revealed behind the whole title and feathering out from its corner.
             artwork
                 .blur(radius: 6)
-                .mask(LinearGradient(stops: [.init(color: .black, location: 0),
-                                             .init(color: .black, location: 0.2),
-                                             .init(color: .clear, location: 0.6)],
-                                     startPoint: .topLeading, endPoint: .bottomTrailing))
+                .mask(alignment: .topLeading) {
+                    RoundedRectangle(cornerRadius: 14)
+                        .frame(width: titleSize.width + 20, height: titleSize.height + 16)
+                        .blur(radius: 10)
+                }
                 .allowsHitTesting(false)
             HStack(spacing: 6) {
                 Image(systemName: category.symbol).font(.subheadline.weight(.semibold))
@@ -113,6 +116,7 @@ private struct CategoryCard: View {
             .foregroundStyle(.white)
             .shadow(color: .black.opacity(0.3), radius: 2, y: 1)
             .padding(12)
+            .onGeometryChange(for: CGSize.self) { $0.size } action: { titleSize = $0 }
         }
         .frame(height: 104)
         .clipShape(.rect(cornerRadius: 16, style: .continuous))
