@@ -296,28 +296,38 @@ private struct EpisodeContextMenu<Extra: View>: ViewModifier {
     }
 }
 
-/// Apple Music's leading swipe on a song row: Play Next (purple) and Play Last (orange).
-private struct QueueSwipeActions: ViewModifier {
+/// Apple Music's swipes on a song row (traced in Music on iOS 27.2: one icon-only action each way, full swipe runs
+/// it): leading, Play Next (`text.line.first.and.arrowtriangle.forward`, system indigo); trailing, Music's Delete
+/// (`trash.fill`, system red), which here is the bookmark toggle.
+private struct EpisodeSwipeActions: ViewModifier {
     @Environment(AudioPlayer.self) private var player
+    @Environment(BookmarkStore.self) private var bookmarks
     let episode: Episode
 
     func body(content: Content) -> some View {
-        if episode.isPlayable {
-            content.swipeActions(edge: .leading) {
-                Button("Play Next", systemImage: "text.line.first.and.arrowtriangle.forward") { player.queueNext(episode) }
-                    .tint(.purple)
-                Button("Play Last", systemImage: "text.line.last.and.arrowtriangle.forward") { player.queueLast(episode) }
-                    .tint(.orange)
+        let marked = bookmarks.isBookmarked(episode)
+        content
+            .swipeActions(edge: .leading) {
+                if episode.isPlayable {
+                    Button { player.queueNext(episode) } label: {
+                        Label("Play Next", systemImage: "text.line.first.and.arrowtriangle.forward").labelStyle(.iconOnly)
+                    }
+                    .tint(.indigo)
+                }
             }
-        } else {
-            content
-        }
+            .swipeActions(edge: .trailing) {
+                Button { bookmarks.toggle(episode) } label: {
+                    Label(marked ? "Remove Bookmark" : "Bookmark", systemImage: marked ? "bookmark.slash.fill" : "bookmark.fill")
+                        .labelStyle(.iconOnly)
+                }
+                .tint(marked ? .red : .orange)
+            }
     }
 }
 
 extension View {
-    /// Play Next / Play Last on a leading swipe (rows in a `List`).
-    func queueSwipeActions(_ episode: Episode) -> some View { modifier(QueueSwipeActions(episode: episode)) }
+    /// Apple Music's row swipes: Play Next leading, bookmark trailing (rows in a `List`).
+    func episodeSwipeActions(_ episode: Episode) -> some View { modifier(EpisodeSwipeActions(episode: episode)) }
 
     func episodeContextMenu<Extra: View>(_ episode: Episode, queue: [Episode] = [], groupingID: String? = nil,
                                          @ViewBuilder extra: () -> Extra = { EmptyView() }) -> some View {
