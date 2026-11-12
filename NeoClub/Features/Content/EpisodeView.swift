@@ -103,6 +103,23 @@ struct EpisodeView: View {
         }
         .aioBackground(artworkURL: shown.artworkURL)
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Menu {
+                    Button {
+                        player.markPlayed(shown)
+                    } label: {
+                        Label("Mark as Played", systemImage: "checkmark.circle")
+                    }
+                    .disabled(player.progress(for: shown)?.isComplete == true)
+                    if let url = URL(string: "https://app.adventuresinodyssey.com/content/\(shown.id)") {
+                        ShareLink(item: url) { Label("Share Episode", systemImage: "square.and.arrow.up") }
+                    }
+                } label: {
+                    Label("More", systemImage: "ellipsis")
+                }
+            }
+        }
         .task { await load() }
     }
 

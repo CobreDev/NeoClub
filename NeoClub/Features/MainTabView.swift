@@ -22,12 +22,21 @@ struct MainTabView: View {
         #if DEBUG
         // Developer convenience: `-debugResumeLast` resumes the most recent episode on launch (progress sync is off in debug).
         .task {
-            if ProcessInfo.processInfo.arguments.contains("-debugResumeLast"), !player.hasItem,
+            let args = ProcessInfo.processInfo.arguments
+            if args.contains("-debugResumeLast"), !player.hasItem,
                let last = player.history.first {
                 player.playFromHistory(last)
             }
+            // `-debugTab browse|library|search` opens that tab on launch.
+            if let i = args.firstIndex(of: "-debugTab"), i + 1 < args.count {
+                tab = ["browse": .browse, "library": .library, "search": .search][args[i + 1]] ?? .home
+            }
+            // `-debugEpisode <episodeID>` opens that episode's page.
+            if let i = args.firstIndex(of: "-debugEpisode"), i + 1 < args.count,
+               let ep = try? await AIOService.episode(args[i + 1]) {
+                paths[tab, default: NavigationPath()].append(Route.episode(ep, groupingID: nil))
+            }
             // `-debugDownload <episodeID>` starts a download on launch (testing without UI input).
-            let args = ProcessInfo.processInfo.arguments
             if let i = args.firstIndex(of: "-debugDownload"), i + 1 < args.count,
                let ep = try? await AIOService.episode(args[i + 1]) {
                 downloads.download(ep)

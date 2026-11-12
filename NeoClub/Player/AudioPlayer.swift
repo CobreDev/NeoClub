@@ -90,6 +90,21 @@ final class AudioPlayer {
         progressOverrides[item.id] ?? item.progress
     }
 
+    /// Marks an episode finished, like the official app's "Mark as Complete": the same progress update playback
+    /// sends at the end (status Complete at the full length). Only syncs when progress sync is on.
+    func markPlayed(_ item: Episode) {
+        let length = item.mediaLength ?? 0
+        progressOverrides[item.id] = ListenProgress(status: "Complete", currentProgress: length)
+        guard ProgressSync.isEnabled else { return }
+        Task {
+            do {
+                try await AIOService.saveProgress(episodeID: item.id, status: "Complete", positionMs: length)
+            } catch {
+                SignInLog.write("mark played failed: \(error.localizedDescription)")
+            }
+        }
+    }
+
     /// Plays an episode, resuming from the profile's saved position. `queue` is the rest of its album/list.
     func play(_ item: Episode, queue: [Episode] = [], groupingID: String? = nil) {
         Task { await load(item, queue: queue, groupingID: groupingID) }
