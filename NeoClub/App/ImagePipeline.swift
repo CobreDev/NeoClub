@@ -154,10 +154,12 @@ struct BlurredArtwork: View {
     @State private var loaded: (url: URL, image: UIImage)?
 
     var body: some View {
+        // A new URL for the same art (e.g. the restored episode's details replacing its saved copy) keeps showing
+        // the last backdrop until the new one is ready, rather than dropping to the plain fill for a moment.
         let shown: UIImage? = url.flatMap { url in
             if let loaded, loaded.url == url { return loaded.image }
             return ImagePipeline.shared.cachedBlurred(url, radius: radius, saturation: saturation)
-        }
+        } ?? loaded?.image
         ZStack {
             if let shown {
                 Image(uiImage: shown).resizable().interpolation(.high).scaledToFill()

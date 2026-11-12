@@ -575,6 +575,9 @@ final class AudioPlayer {
         artwork = nil
         artworkImage = nil
         guard let url else { return }
+        // Make Now Playing's blurred backdrop now, so it's there the moment the card opens (made on open, the card
+        // showed its plain fill and then faded the art in: a flash).
+        Task { _ = await ImagePipeline.shared.blurred(url, radius: NowPlayingBackdrop.blurRadius, saturation: NowPlayingBackdrop.saturation) }
         Task {
             guard let image = await ImagePipeline.shared.image(url, pixels: 1024) else { return }
             artworkImage = image

@@ -137,13 +137,15 @@ extension View {
 /// Blurred cover art over the brand navy, behind the Now Playing card.
 struct NowPlayingBackdrop: View {
     @Environment(AudioPlayer.self) private var player
+    static let blurRadius: Double = 26
+    static let saturation: Double = 1.3
 
     var body: some View {
         Color.aioNavy
             .overlay {
                 // Blurred once from a 64 px copy (was a live 80 pt blur over the full cover, redrawn on every frame
                 // of the card's open/close animation).
-                BlurredArtwork(url: player.episode?.artworkURL, radius: 26, saturation: 1.3)
+                BlurredArtwork(url: player.episode?.artworkURL, radius: Self.blurRadius, saturation: Self.saturation)
                     .opacity(0.7)
             }
             .overlay(LinearGradient(colors: [.black.opacity(0.1), .black.opacity(0.45)], startPoint: .top, endPoint: .bottom))

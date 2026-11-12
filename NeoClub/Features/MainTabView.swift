@@ -72,6 +72,17 @@ struct MainTabView: View {
             if let i = args.firstIndex(of: "-debugTab"), i + 1 < args.count {
                 tab = ["browse": .browse, "library": .library, "search": .search][args[i + 1]] ?? .home
             }
+            // `-debugAlbum` opens an album page made of placeholder episodes (no account needed; for testing rows).
+            if args.contains("-debugAlbum") {
+                let eps = (1...8).map { ["id": "placeholder-\($0)", "name": "#00\($0): Placeholder Episode \($0)", "type": "Audio",
+                                          "media_length": 1_301_240] as [String: Any] }
+                let json: [String: Any] = ["id": "placeholder-album", "name": "Placeholder Album", "type": "Album", "contentList": eps,
+                                           "imageURL": "https://d23sy43gbewnpt.cloudfront.net/public/images/content/1_-_whits_flop.png"]
+                if let data = try? JSONSerialization.data(withJSONObject: json),
+                   let g = try? JSONDecoder().decode(Grouping.self, from: data) {
+                    paths[tab, default: []].append(Route.grouping(id: "placeholder-album", preview: g))
+                }
+            }
             // `-debugEpisode <episodeID>` opens that episode's page.
             if let i = args.firstIndex(of: "-debugEpisode"), i + 1 < args.count,
                let ep = try? await AIOService.episode(args[i + 1]) {

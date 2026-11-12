@@ -48,8 +48,17 @@ final class NowPlayingPresenter: NSObject {
         vc.view.layoutIfNeeded()
     }
 
+    /// The controller while its close is still running (UIKit won't present it again until that has finished).
+    private var dismissing: UIHostingController<AnyView>?
+    /// What was last asked for; an open asked for during a close happens when the close finishes.
+    private var wantsShow = false
+    /// Keeps the page behind still for the length of the close (see `holdBackgroundStill`).
+    private var holdLink: CADisplayLink?
+    private var holdUntil = Date.distantPast
+
     /// Shows or hides Now Playing to match `show`.
     func update(show: Bool) {
+        wantsShow = show
         if show { present() } else { dismiss() }
     }
 
@@ -76,8 +85,11 @@ final class NowPlayingPresenter: NSObject {
     }
 
     private func present() {
-        guard presented == nil, let root else { return }
+        // Reopened while the last close is still landing: presenting the same controller then makes UIKit throw
+        // (it ran the deferred present inside the close's completion and crashed). Open once it has finished.
+        guard presented == nil, dismissing == nil, let root else { return }
         let vc = controller()
+        guard vc.presentingViewController == nil else { return }
         vc.preferredTransition = nil
         vc.transitioningDelegate = self
         openAnimator.source = accessoryView()?.convert(accessoryView()?.bounds ?? .zero, to: nil)
@@ -96,11 +108,37 @@ final class NowPlayingPresenter: NSObject {
         options.dimmingColor = .black.withAlphaComponent(0.12)
         options.dimmingVisualEffect = nil
         vc.preferredTransition = .zoom(options: options) { [weak self] _ in self?.accessoryView() }
-        vc.dismiss(animated: true)
-        // The zoom dismissal also springs the page behind back out from a pushed-back position (a visible bounce).
-        // Apple Music's page never moves: drop those animations from the page behind, leaving the card's landing.
+        dismissing = vc
+        vc.dismiss(animated: true) { [weak self] in
+            guard let self else { return }
+            self.dismissing = nil
+            self.stopHolding()
+            if self.wantsShow { self.present() }
+        }
+        // The zoom dismissal also springs the page behind back out from a pushed-back position (a visible bounce,
+        // added a frame or more after the dismissal starts on the device). Apple Music's page never moves: keep
+        // dropping those animations from the page behind every frame until the close has finished, leaving the
+        // card's landing.
+        startHolding()
+    }
+
+    private func startHolding() {
         holdBackgroundStill()
-        DispatchQueue.main.async { [weak self] in self?.holdBackgroundStill() }
+        holdUntil = Date().addingTimeInterval(1.5)
+        guard holdLink == nil else { return }
+        let link = CADisplayLink(target: self, selector: #selector(holdTick))
+        link.add(to: .main, forMode: .common)
+        holdLink = link
+    }
+
+    @objc private func holdTick() {
+        holdBackgroundStill()
+        if Date() > holdUntil { stopHolding() }
+    }
+
+    private func stopHolding() {
+        holdLink?.invalidate()
+        holdLink = nil
     }
 
     /// Removes geometry animations from the presenting page (the tab shell) and the containers above it.
@@ -112,11 +150,19 @@ final class NowPlayingPresenter: NSObject {
                 for name in names {
                     let keyPath = (view.layer.animation(forKey: name) as? CAPropertyAnimation)?.keyPath ?? name
                     if keys.contains(where: { keyPath.hasPrefix($0) || name.hasPrefix($0) }) {
+                        TransitionLog.write("hold: removed \(name) (\(keyPath)) from \(type(of: view))")
                         view.layer.removeAnimation(forKey: name)
                     }
                 }
             }
-            view.layer.transform = CATransform3DIdentity
+            if !CATransform3DIsIdentity(view.layer.transform) {
+                TransitionLog.write("hold: reset transform of \(type(of: view))")
+                view.layer.transform = CATransform3DIdentity
+            }
+            if !CATransform3DIsIdentity(view.layer.sublayerTransform) {
+                TransitionLog.write("hold: reset sublayerTransform of \(type(of: view))")
+                view.layer.sublayerTransform = CATransform3DIdentity
+            }
             guard let parent = view.superview, !(parent is UIWindow) else { break }
             view = parent
         }
@@ -205,5 +251,22 @@ private final class OpenAnimator: NSObject, UIViewControllerAnimatedTransitionin
             ctx.completeTransition(!ctx.transitionWasCancelled)
         }
         animator.startAnimation()
+    }
+}
+
+/// Debug-build log of what the close had to hold still (Library/Logs/transition-log.txt, pulled from the device).
+enum TransitionLog {
+    static func write(_ line: String) {
+        #if DEBUG
+        let dir = FileManager.default.urls(for: .libraryDirectory, in: .userDomainMask)[0].appendingPathComponent("Logs")
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let url = dir.appendingPathComponent("transition-log.txt")
+        let entry = "\(Date().formatted(.iso8601.time(includingFractionalSeconds: true))) \(line)\n"
+        if let h = try? FileHandle(forWritingTo: url) {
+            h.seekToEndOfFile(); h.write(Data(entry.utf8)); try? h.close()
+        } else {
+            try? entry.write(to: url, atomically: true, encoding: .utf8)
+        }
+        #endif
     }
 }
