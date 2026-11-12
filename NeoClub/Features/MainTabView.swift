@@ -50,15 +50,17 @@ struct MainTabView: View {
             // its PalettePresentationAnimationController runs on _UIZoomTransitionController, and the accessory's
             // Liquid Glass is matched to the card as it lands), so the native version is the same mechanism.
             .overlay { if !nativePresentation { PlayerCardHost() } }
-            .fullScreenCover(isPresented: nativePresentation ? Binding(
-                get: { player.showNowPlaying }, set: { player.showNowPlaying = $0 }) : .constant(false)) {
-                NowPlayingPresentation()
-                    .navigationTransition(.zoom(sourceID: NowPlayingPresentation.sourceID, in: nowPlayingZoom))
+            // Presented from UIKit: Music's open animator, the system zoom transition for the close.
+            .onChange(of: player.showNowPlaying) { _, show in
+                if nativePresentation { NowPlayingPresenter.shared.update(show: show) }
             }
             // The mini player is always there: bring back whatever was playing last (paused).
             .task {
                 player.restoreLastSession()
                 restoreScene()
+                // Have Now Playing built and laid out before it's first opened.
+                try? await Task.sleep(for: .seconds(1))
+                if nativePresentation { NowPlayingPresenter.shared.prepare() }
             }
             .onChange(of: paths) { saveScene() }
             .onChange(of: tab) { saveScene() }
@@ -287,13 +289,20 @@ struct NowPlayingPresentation: View {
     /// Touch slop before the card starts to follow (UIKit's).
     private let slop: CGFloat = 12
 
+    /// The screen's insets, from the window: inside the growing card the view's own safe area is measured in its
+    /// scaled space and comes out huge, which pushed the player's contents off the card while it opened.
+    private var screenInsets: EdgeInsets {
+        let w = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.flatMap(\.windows).first { $0.isKeyWindow }
+        let i = w?.safeAreaInsets ?? .zero
+        return EdgeInsets(top: i.top, leading: i.left, bottom: i.bottom, trailing: i.right)
+    }
+
     var body: some View {
-        GeometryReader { geo in
-            NowPlayingView(drawsBackground: true, insets: geo.safeAreaInsets)
-                .padding(geo.safeAreaInsets)
-        }
-        .ignoresSafeArea()
-        .background(PresentedControllerReader { card.controller = $0 })
+        let insets = screenInsets
+        NowPlayingView(drawsBackground: true, insets: insets)
+            .padding(insets)
+            .ignoresSafeArea()
+            .background(PresentedControllerReader { card.controller = $0 })
         // The system's drag-to-dismiss would shrink the card; the drag below replaces it.
         .interactiveDismissDisabled()
         .gesture(DragGesture(minimumDistance: slop, coordinateSpace: .global)
