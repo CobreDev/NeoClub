@@ -34,9 +34,22 @@ final class NowPlayingPresenter: NSObject {
         // Insets come from the window (see NowPlayingPresentation), not from the view's scaled frame.
         vc.safeAreaRegions = []
         vc.view.backgroundColor = .clear
-        vc.modalPresentationStyle = .overFullScreen
+        // Apple Music's presentation (traced 2026-11-12): a form sheet made full screen with the sheet controller's
+        // private `wantsFullScreen`, not `.overFullScreen`. With `.overFullScreen` the zoom close treats the page
+        // behind as pushed back and springs it out (the page jumped ~13 pt and slid back); as Music's sheet it stays.
+        vc.modalPresentationStyle = .formSheet
+        configureSheet(vc)
         cached = vc
         return vc
+    }
+
+    private func configureSheet(_ vc: UIViewController) {
+        guard let sheet = vc.sheetPresentationController else { return }
+        sheet.detents = [.large()]
+        sheet.prefersGrabberVisible = false
+        // `-[UISheetPresentationController _setWantsFullScreen:]`, set by KVC; Music has it on.
+        let selector = NSSelectorFromString("_setWantsFullScreen:")
+        if sheet.responds(to: selector) { sheet.setValue(true, forKey: "wantsFullScreen") }
     }
 
     /// Builds and lays out Now Playing ahead of time (call once the app is showing).
@@ -52,9 +65,6 @@ final class NowPlayingPresenter: NSObject {
     private var dismissing: UIHostingController<AnyView>?
     /// What was last asked for; an open asked for during a close happens when the close finishes.
     private var wantsShow = false
-    /// Keeps the page behind still for the length of the close (see `holdBackgroundStill`).
-    private var holdLink: CADisplayLink?
-    private var holdUntil = Date.distantPast
 
     /// Shows or hides Now Playing to match `show`.
     func update(show: Bool) {
@@ -91,6 +101,8 @@ final class NowPlayingPresenter: NSObject {
         let vc = controller()
         guard vc.presentingViewController == nil else { return }
         vc.preferredTransition = nil
+        vc.modalPresentationStyle = .formSheet
+        configureSheet(vc)
         vc.transitioningDelegate = self
         openAnimator.source = accessoryView()?.convert(accessoryView()?.bounds ?? .zero, to: nil)
         presented = vc
@@ -112,61 +124,10 @@ final class NowPlayingPresenter: NSObject {
         vc.dismiss(animated: true) { [weak self] in
             guard let self else { return }
             self.dismissing = nil
-            self.stopHolding()
             if self.wantsShow { self.present() }
         }
-        // The zoom dismissal also springs the page behind back out from a pushed-back position (a visible bounce,
-        // added a frame or more after the dismissal starts on the device). Apple Music's page never moves: keep
-        // dropping those animations from the page behind every frame until the close has finished, leaving the
-        // card's landing.
-        startHolding()
     }
 
-    private func startHolding() {
-        holdBackgroundStill()
-        holdUntil = Date().addingTimeInterval(1.5)
-        guard holdLink == nil else { return }
-        let link = CADisplayLink(target: self, selector: #selector(holdTick))
-        link.add(to: .main, forMode: .common)
-        holdLink = link
-    }
-
-    @objc private func holdTick() {
-        holdBackgroundStill()
-        if Date() > holdUntil { stopHolding() }
-    }
-
-    private func stopHolding() {
-        holdLink?.invalidate()
-        holdLink = nil
-    }
-
-    /// Removes geometry animations from the presenting page (the tab shell) and the containers above it.
-    private func holdBackgroundStill() {
-        guard let window, var view = window.rootViewController?.view else { return }
-        let keys = ["transform", "position", "bounds", "anchorPoint", "sublayerTransform", "zPosition"]
-        while true {
-            if let names = view.layer.animationKeys() {
-                for name in names {
-                    let keyPath = (view.layer.animation(forKey: name) as? CAPropertyAnimation)?.keyPath ?? name
-                    if keys.contains(where: { keyPath.hasPrefix($0) || name.hasPrefix($0) }) {
-                        TransitionLog.write("hold: removed \(name) (\(keyPath)) from \(type(of: view))")
-                        view.layer.removeAnimation(forKey: name)
-                    }
-                }
-            }
-            if !CATransform3DIsIdentity(view.layer.transform) {
-                TransitionLog.write("hold: reset transform of \(type(of: view))")
-                view.layer.transform = CATransform3DIdentity
-            }
-            if !CATransform3DIsIdentity(view.layer.sublayerTransform) {
-                TransitionLog.write("hold: reset sublayerTransform of \(type(of: view))")
-                view.layer.sublayerTransform = CATransform3DIdentity
-            }
-            guard let parent = view.superview, !(parent is UIWindow) else { break }
-            view = parent
-        }
-    }
 }
 
 extension NowPlayingPresenter: UIViewControllerTransitioningDelegate {
@@ -251,22 +212,5 @@ private final class OpenAnimator: NSObject, UIViewControllerAnimatedTransitionin
             ctx.completeTransition(!ctx.transitionWasCancelled)
         }
         animator.startAnimation()
-    }
-}
-
-/// Debug-build log of what the close had to hold still (Library/Logs/transition-log.txt, pulled from the device).
-enum TransitionLog {
-    static func write(_ line: String) {
-        #if DEBUG
-        let dir = FileManager.default.urls(for: .libraryDirectory, in: .userDomainMask)[0].appendingPathComponent("Logs")
-        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        let url = dir.appendingPathComponent("transition-log.txt")
-        let entry = "\(Date().formatted(.iso8601.time(includingFractionalSeconds: true))) \(line)\n"
-        if let h = try? FileHandle(forWritingTo: url) {
-            h.seekToEndOfFile(); h.write(Data(entry.utf8)); try? h.close()
-        } else {
-            try? entry.write(to: url, atomically: true, encoding: .utf8)
-        }
-        #endif
     }
 }
