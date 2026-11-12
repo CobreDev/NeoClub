@@ -45,6 +45,7 @@ final class PlayerCardModel {
 
     func open() {
         generation += 1
+        closing = false
         if !visible {
             var tx = Transaction(); tx.disablesAnimations = true
             withTransaction(tx) { top = miniFrame.minY; morph = 1; face = 1 }
@@ -59,16 +60,33 @@ final class PlayerCardModel {
         withTransaction(tx) { top = fullFrame.minY + max(0, distance) }
     }
 
+    /// Apple Music lets the card glide at the finger's speed for about 80 ms after release (its animator's
+    /// continue phase, measured 66–96 ms) before the collapse springs start.
+    static let releaseCoast: TimeInterval = 0.08
+    /// True from release until the card has collapsed (or is opened again).
+    private(set) var closing = false
+
     /// Collapses into the mini player from wherever the card is, carrying `velocity` (points per second, downward).
     func close(velocity: CGFloat = 0) {
         generation += 1
         let gen = generation
-        let remaining = max(1, miniFrame.minY - top)
-        withAnimation(Self.morphSpring) { morph = 1 } completion: { [weak self] in
-            guard let self, self.generation == gen else { return }
-            self.visible = false
+        closing = true
+        let v = max(0, velocity)
+        // Coast first, at the release speed.
+        if v > 0 {
+            let coastTo = min(miniFrame.minY, top + v * Self.releaseCoast)
+            withAnimation(.linear(duration: Self.releaseCoast)) { top = coastTo }
         }
-        withAnimation(Self.travelSpring(initialVelocity: max(0, velocity) / remaining)) { top = miniFrame.minY }
+        DispatchQueue.main.asyncAfter(deadline: .now() + (v > 0 ? Self.releaseCoast : 0)) { [weak self] in
+            guard let self, self.generation == gen else { return }
+            let remaining = max(1, self.miniFrame.minY - self.top)
+            withAnimation(Self.morphSpring) { self.morph = 1 } completion: { [weak self] in
+                guard let self, self.generation == gen else { return }
+                self.visible = false
+                self.closing = false
+            }
+            withAnimation(Self.travelSpring(initialVelocity: v / remaining)) { self.top = self.miniFrame.minY }
+        }
     }
 
     /// Released without dismissing: back to the top.
@@ -190,7 +208,7 @@ struct PlayerCardHost: View {
             .onChange(of: full) { _, f in model.fullFrame = f }
         }
         .onChange(of: player.showNowPlaying) { _, show in
-            if show { model.open() } else if model.visible && model.morph < 1 { model.close() }
+            if show { model.open() } else if model.visible && model.morph < 1 && !model.closing { model.close() }
         }
     }
 

@@ -241,7 +241,7 @@ struct GroupingGridView: View {
 }
 
 /// Splits the AIO album list: regular numbered albums vs. the club-exclusive "½" seasons.
-enum GroupingFilter: String, Hashable {
+enum GroupingFilter: String, Hashable, Codable {
     case all, regularAlbums, clubAlbums
 
     func includes(_ g: Grouping) -> Bool {

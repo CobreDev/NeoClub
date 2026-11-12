@@ -5,16 +5,38 @@ struct MainTabView: View {
     @Environment(AudioPlayer.self) private var player
     @Environment(DownloadStore.self) private var downloads
 
-    enum TabID: Hashable { case home, browse, library, search }
+    enum TabID: String, Hashable { case home, browse, library, search }
     /// #001 Whit's Flop: the only episode to play while testing (progress syncs to the account).
     static let testEpisodeID = "a354W0000046TjUQAU"
     @Environment(NetworkMonitor.self) private var network
     @Environment(BookmarkStore.self) private var bookmarks
     @State private var tab: TabID = NetworkMonitor.shared.isOnline ? .home : .library
-    @State private var paths: [TabID: NavigationPath] = [:]
+    @State private var paths: [TabID: [Route]] = [:]
+    /// The app's place, kept with the window so it survives the window being recreated (unfolding the iPhone Duo
+    /// moves the app to the inner screen).
+    @SceneStorage("sceneState") private var storedScene: Data?
+    @State private var restored = false
 
-    private func path(_ id: TabID) -> Binding<NavigationPath> {
-        Binding(get: { paths[id] ?? NavigationPath() }, set: { paths[id] = $0 })
+    private func path(_ id: TabID) -> Binding<[Route]> {
+        Binding(get: { paths[id] ?? [] }, set: { paths[id] = $0 })
+    }
+
+    private func saveScene() {
+        guard restored else { return }
+        let state = SceneState(tab: tab.rawValue,
+                               paths: Dictionary(uniqueKeysWithValues: paths.map { ($0.key.rawValue, $0.value.compactMap(StoredRoute.init)) }),
+                               nowPlayingOpen: player.showNowPlaying)
+        storedScene = try? JSONEncoder().encode(state)
+    }
+
+    private func restoreScene() {
+        defer { restored = true }
+        guard !restored, let data = storedScene, let state = try? JSONDecoder().decode(SceneState.self, from: data) else { return }
+        if let t = TabID(rawValue: state.tab) { tab = t }
+        for (key, routes) in state.paths {
+            if let id = TabID(rawValue: key) { paths[id] = routes.compactMap(\.route) }
+        }
+        if state.nowPlayingOpen && player.hasItem { player.showNowPlaying = true }
     }
 
     var body: some View {
@@ -22,7 +44,13 @@ struct MainTabView: View {
             // Now Playing card (Apple Music-style slide-then-collapse into the mini player).
             .overlay { PlayerCardHost() }
             // The mini player is always there: bring back whatever was playing last (paused).
-            .task { player.restoreLastSession() }
+            .task {
+                player.restoreLastSession()
+                restoreScene()
+            }
+            .onChange(of: paths) { saveScene() }
+            .onChange(of: tab) { saveScene() }
+            .onChange(of: player.showNowPlaying) { saveScene() }
         #if DEBUG
         // Developer convenience. Progress syncs, so test playback is always Whit's Flop: `-debugPlayTest` plays it.
         .task {
@@ -37,7 +65,7 @@ struct MainTabView: View {
             // `-debugEpisode <episodeID>` opens that episode's page.
             if let i = args.firstIndex(of: "-debugEpisode"), i + 1 < args.count,
                let ep = try? await AIOService.episode(args[i + 1]) {
-                paths[tab, default: NavigationPath()].append(Route.episode(ep, groupingID: nil))
+                paths[tab, default: []].append(Route.episode(ep, groupingID: nil))
             }
             // `-debugDownload <episodeID>` starts a download on launch (testing without UI input).
             if let i = args.firstIndex(of: "-debugDownload"), i + 1 < args.count,
@@ -68,7 +96,7 @@ struct MainTabView: View {
         .onChange(of: player.navigationRequest) { _, route in
             guard let route else { return }
             player.showNowPlaying = false
-            paths[tab, default: NavigationPath()].append(route)
+            paths[tab, default: []].append(route)
             player.navigationRequest = nil
         }
         // Launching or dropping offline: the Library (Downloads) is what still works.
