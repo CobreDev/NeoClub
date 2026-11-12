@@ -9,7 +9,6 @@ enum Route: Hashable {
     case character(id: String, preview: CastMember?)
     case author(id: String, preview: Author?)
     case bookmarks
-    case downloads
 }
 
 extension View {
@@ -22,7 +21,6 @@ extension View {
             case .character(let id, let preview): CharacterView(characterID: id, preview: preview)
             case .author(let id, let preview): AuthorView(authorID: id, preview: preview)
             case .bookmarks: BookmarksView()
-            case .downloads: DownloadsView()
             }
         }
     }
@@ -278,12 +276,13 @@ extension Episode {
     var shareURL: URL { URL(string: "https://app.adventuresinodyssey.com/content/\(id)")! }
 }
 
-/// Long-press menu for an episode anywhere in the app: Play, Mark as Played/Unplayed, Share.
-private struct EpisodeContextMenu: ViewModifier {
+/// Long-press menu for an episode anywhere in the app: Play, Mark as Played/Unplayed, Share, plus any extra items.
+private struct EpisodeContextMenu<Extra: View>: ViewModifier {
     @Environment(AudioPlayer.self) private var player
     let episode: Episode
     let queue: [Episode]
     let groupingID: String?
+    let extra: Extra
 
     func body(content: Content) -> some View {
         content.contextMenu {
@@ -294,12 +293,14 @@ private struct EpisodeContextMenu: ViewModifier {
                 Button("Mark as Played", systemImage: "checkmark.circle") { player.markPlayed(episode) }
             }
             ShareLink(item: episode.shareURL) { Label("Share Episode", systemImage: "square.and.arrow.up") }
+            extra
         }
     }
 }
 
 extension View {
-    func episodeContextMenu(_ episode: Episode, queue: [Episode] = [], groupingID: String? = nil) -> some View {
-        modifier(EpisodeContextMenu(episode: episode, queue: queue, groupingID: groupingID))
+    func episodeContextMenu<Extra: View>(_ episode: Episode, queue: [Episode] = [], groupingID: String? = nil,
+                                         @ViewBuilder extra: () -> Extra = { EmptyView() }) -> some View {
+        modifier(EpisodeContextMenu(episode: episode, queue: queue, groupingID: groupingID, extra: extra()))
     }
 }
