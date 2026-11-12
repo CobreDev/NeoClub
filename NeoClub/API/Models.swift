@@ -157,6 +157,14 @@ struct Episode: Decodable, Identifiable, Hashable {
               raw[raw.index(after: raw.startIndex)..<colon].allSatisfy(\.isNumber) else { return raw }
         return raw[raw.index(after: colon)...].trimmingCharacters(in: .whitespaces)
     }
+    /// Title with its episode number in front ("#572: Odyssey Sings!", "#572d: BONUS! …"), as the server sends it;
+    /// shown in Now Playing, where the number isn't shown anywhere else.
+    var numberedTitle: String {
+        let raw = name ?? shortName ?? "Episode"
+        if raw.hasPrefix("#") { return raw }
+        if let n = episodeNumber, !n.isEmpty { return "#\(n): \(raw)" }
+        return raw
+    }
     /// Album name, ignoring the server quirk where it repeats the type (e.g. "Episode").
     var albumTitle: String? {
         guard let a = albumName, !a.isEmpty, a != subtype, a != type else { return nil }

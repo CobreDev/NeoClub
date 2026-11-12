@@ -115,7 +115,8 @@ final class AudioPlayer {
     private func persistSession() {
         guard let e = episode else { return }
         lastPersist = Date()
-        let s = Session(id: e.id, title: e.title, album: e.albumTitle, artwork: e.thumbnailMedium ?? e.thumbnailSmall,
+        // The full name (with its "#572: " number) so the restored Now Playing title matches.
+        let s = Session(id: e.id, title: e.name ?? e.title, album: e.albumTitle, artwork: e.thumbnailMedium ?? e.thumbnailSmall,
                         groupingID: groupingID, positionMs: Int(position * 1000),
                         durationMs: e.mediaLength ?? Int(duration * 1000))
         UserDefaults.standard.set(try? JSONEncoder().encode(s), forKey: Session.key)
