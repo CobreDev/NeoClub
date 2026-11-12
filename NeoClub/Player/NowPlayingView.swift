@@ -14,8 +14,14 @@ struct NowPlayingView: View {
     var drawsBackground = true
     @State private var mode: Mode = .artwork
     @State private var halfFolded = false
+    /// Shared between the big artwork/title and the small header, so switching to Up Next moves the same artwork
+    /// and title into place (Apple Music) instead of cross-fading two copies.
+    @Namespace private var ns
 
     enum Mode { case artwork, info, queue }
+
+    /// Apple Music's switch between the player and Up Next: a smooth, non-bouncy spring.
+    static let modeAnimation = Animation.smooth(duration: 0.5)
 
     var body: some View {
         GeometryReader { geo in
@@ -34,7 +40,6 @@ struct NowPlayingView: View {
         }
         .foregroundStyle(.white)
         .background { if drawsBackground { NowPlayingBackdrop() } }
-        .animation(.spring(response: 0.42, dampingFraction: 0.86), value: mode)
         .animation(.spring(response: 0.45, dampingFraction: 0.9), value: halfFolded)
         .readsHinge($halfFolded)
         .presentationDragIndicator(.hidden)
@@ -47,50 +52,69 @@ struct NowPlayingView: View {
 
     // MARK: Layouts
 
+    /// Portrait (phone width, the Duo's outer screen, or the inner screen upright), measured from Apple Music:
+    /// the artwork fills a column of up to 513 pt with 28 pt margins; the scrubber, controls, volume and bottom
+    /// buttons stay exactly where they are when Up Next opens, and only the area above them changes.
     private func portraitLayout(_ size: CGSize) -> some View {
-        // Phones use ~28pt margins and full-width artwork; the big inner screen centers a ~520pt column.
-        let large = size.width > 600
-        let content = min(size.width - 56, 520)
+        let content = min(size.width - 56, 513)
+        let narrow = size.width < 500
         return VStack(spacing: 0) {
             grabber
-            if mode == .artwork {
-                Spacer(minLength: 12)
-                bigArtwork.frame(width: large ? min(380, content) : content)
-                Spacer(minLength: 28)
-                titleRow
-            } else {
-                compactHeader.padding(.top, 22)
-                panel.padding(.top, 18).frame(maxHeight: .infinity)
+            VStack(spacing: 0) {
+                if mode == .artwork {
+                    Spacer(minLength: 12)
+                    // Up to the column width, smaller when the screen is short, so the controls below never move.
+                    bigArtwork.frame(maxWidth: content, maxHeight: content)
+                    Spacer(minLength: 24)
+                    titleRow
+                } else {
+                    compactHeader.padding(.top, 18)
+                    if narrow { modeCapsules.padding(.top, 16) }
+                    panel.padding(.top, 16)
+                }
             }
-            ScrubberBar().padding(.top, mode == .artwork ? 22 : 12)
-            transport.padding(.top, large ? 34 : 22)
-            VolumeBar().padding(.top, large ? 40 : 26)
-            bottomBar.padding(.top, large ? 34 : 26).padding(.bottom, 6)
+            .frame(maxHeight: .infinity, alignment: .top)
+            controls(narrow: narrow, large: size.height > 800)
         }
         .frame(width: content)
         .frame(maxWidth: .infinity)
     }
 
+    /// Scrubber, transport, volume and the bottom buttons: the part that never moves.
+    private func controls(narrow: Bool, large: Bool) -> some View {
+        VStack(spacing: 0) {
+            ScrubberBar().padding(.top, 22)
+            transport(narrow: narrow).padding(.top, large ? 34 : 22)
+            VolumeBar().padding(.top, large ? 40 : 26)
+            bottomBar.padding(.top, large ? 34 : 26).padding(.bottom, 6)
+        }
+    }
+
     private func laptopLayout(_ size: CGSize) -> some View {
         // The top half stands upright to look at; the controls sit on the bottom half, below the crease.
-        let content = min(size.width - 56, 520)
+        let content = min(size.width - 56, 513)
         let half = size.height / 2
         return VStack(spacing: 0) {
             Group {
                 if mode == .artwork {
-                    bigArtwork.frame(width: min(content, half - 60))
+                    let side = min(content, half - 60)
+                    bigArtwork.frame(width: side, height: side)
                 } else {
-                    panel.padding(.top, 20)
+                    VStack(spacing: 0) {
+                        compactHeader
+                        panel.padding(.top, 16)
+                    }
+                    .padding(.top, 20)
                 }
             }
             .frame(height: half)
 
             VStack(spacing: 0) {
-                if mode == .artwork { titleRow } else { compactHeader }
+                if mode == .artwork { titleRow } else { Color.clear.frame(height: 1) }
                 Spacer(minLength: 10)
                 ScrubberBar()
                 Spacer(minLength: 10)
-                transport
+                transport(narrow: false)
                 Spacer(minLength: 10)
                 VolumeBar()
                 Spacer(minLength: 10)
@@ -103,19 +127,21 @@ struct NowPlayingView: View {
         .frame(maxWidth: .infinity)
     }
 
+    /// Landscape inner screen (Apple Music on a wide screen): a ~400 pt column with 330 pt artwork, centered; with
+    /// Up Next open, the column moves to the middle of the left half and the list fills a column on the right.
     private func landscapeLayout(_ size: CGSize) -> some View {
         let column: CGFloat = 400
-        let art = min(250, size.height * 0.36)
+        let art = min(330, size.height * 0.48)
         return VStack(spacing: 0) {
             grabber
             HStack(spacing: 0) {
                 VStack(spacing: 0) {
                     Spacer(minLength: 8)
-                    bigArtwork.frame(width: art)
+                    bigArtwork.frame(width: art, height: art)
                     Spacer(minLength: 20)
                     titleRow
                     ScrubberBar().padding(.top, 18)
-                    transport.padding(.top, 18)
+                    transport(narrow: false).padding(.top, 18)
                     VolumeBar().padding(.top, 22)
                     Spacer(minLength: 8)
                 }
@@ -125,8 +151,8 @@ struct NowPlayingView: View {
                 if mode != .artwork {
                     panel
                         .padding(.top, 20)
-                        .frame(width: min(size.width * 0.42, 460))
-                        .padding(.trailing, 40)
+                        .frame(width: min(size.width * 0.4, 380))
+                        .padding(.trailing, 32)
                         .transition(.move(edge: .trailing).combined(with: .opacity))
                 }
             }
@@ -151,65 +177,101 @@ struct NowPlayingView: View {
         .frame(height: 44)
     }
 
+    /// The player's loaded artwork (no reload while it moves), falling back to loading it.
+    private func artworkImage(cornerRadius: CGFloat) -> some View {
+        Group {
+            if let image = player.artworkImage {
+                Color.clear.aspectRatio(1, contentMode: .fit)
+                    .overlay { Image(uiImage: image).resizable().scaledToFill() }
+                    .clipShape(.rect(cornerRadius: cornerRadius))
+            } else {
+                Artwork(url: player.episode?.artworkURL, cornerRadius: cornerRadius)
+            }
+        }
+    }
+
     private var bigArtwork: some View {
-        Artwork(url: player.episode?.artworkURL, cornerRadius: 10)
+        artworkImage(cornerRadius: 10)
+            .matchedGeometryEffect(id: "artwork", in: ns)
             .shadow(color: .black.opacity(player.isPlaying ? 0.45 : 0.2), radius: player.isPlaying ? 28 : 10, y: 14)
             .scaleEffect(player.isPlaying ? 1 : 0.78)
             .animation(.spring(response: 0.5, dampingFraction: 0.7), value: player.isPlaying)
-            .transition(.scale(scale: 0.4, anchor: .topLeading).combined(with: .opacity))
     }
 
     private var panel: some View {
         Group {
             if mode == .info { InfoPanel() } else { QueuePanel() }
         }
+        .frame(maxHeight: .infinity, alignment: .top)
         .transition(.opacity)
     }
 
     // MARK: Pieces
 
-
-    /// Title over album (Apple: ~20pt semibold over ~20pt secondary), ⋯ on the right.
+    /// Title over album (Apple: ~20pt semibold over ~20pt secondary), bookmark and ⋯ on the right.
     private var titleRow: some View {
         HStack(alignment: .center, spacing: 16) {
-            VStack(alignment: .leading, spacing: 1) {
-                Text(player.episode?.title ?? "")
-                    .font(.universBold(20, relativeTo: .title3))
-                    .lineLimit(1)
-                Text(player.episode?.albumTitle ?? "Adventures in Odyssey")
-                    .font(.univers(20, relativeTo: .title3))
-                    .opacity(0.6)
-                    .lineLimit(1)
-            }
+            titles(size: 20)
             Spacer(minLength: 0)
-            NowPlayingBookmark()
-            EpisodeMenu()
+            actions
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    /// Small artwork + title shown above Info / Up Next, like Apple Music's queue view.
-    private var compactHeader: some View {
-        HStack(spacing: 14) {
-            Artwork(url: player.episode?.smallArtworkURL, cornerRadius: 6)
-                .frame(width: 64, height: 64)
-                .shadow(color: .black.opacity(0.3), radius: 8, y: 4)
-                .onTapGesture { mode = .artwork }
-            VStack(alignment: .leading, spacing: 1) {
-                Text(player.episode?.title ?? "").font(.universBold(17)).lineLimit(1)
-                Text(player.episode?.albumTitle ?? "Adventures in Odyssey").font(.univers(17)).opacity(0.6).lineLimit(1)
-            }
-            Spacer(minLength: 0)
+    private func titles(size: CGFloat) -> some View {
+        VStack(alignment: .leading, spacing: 1) {
+            Text(player.episode?.title ?? "")
+                .font(.universBold(size, relativeTo: .title3))
+                .lineLimit(1)
+            Text(player.episode?.albumTitle ?? "Adventures in Odyssey")
+                .font(.univers(size, relativeTo: .title3))
+                .opacity(0.6)
+                .lineLimit(1)
+        }
+        .matchedGeometryEffect(id: "titles", in: ns)
+    }
+
+    private var actions: some View {
+        HStack(spacing: 16) {
             NowPlayingBookmark()
             EpisodeMenu()
         }
+        .matchedGeometryEffect(id: "actions", in: ns)
     }
 
-    /// Podcasts transport: speed · back 15 · play · forward 30 · sleep timer.
-    private var transport: some View {
+    /// Small artwork + title above Info / Up Next, like Apple Music's queue view (72 pt artwork).
+    private var compactHeader: some View {
+        HStack(spacing: 16) {
+            artworkImage(cornerRadius: 8)
+                .matchedGeometryEffect(id: "artwork", in: ns)
+                .frame(width: 72, height: 72)
+                .shadow(color: .black.opacity(0.3), radius: 8, y: 4)
+                .onTapGesture { withAnimation(Self.modeAnimation) { mode = .artwork } }
+            // Same size as under the big artwork (Apple Music), so the title slides instead of cross-fading.
+            titles(size: 20)
+            Spacer(minLength: 0)
+            actions
+        }
+    }
+
+    /// Narrow screens only (Apple Music's capsule row of shuffle / repeat in Up Next): speed and sleep timer
+    /// move up here from the sides of the transport.
+    private var modeCapsules: some View {
+        HStack(spacing: 12) {
+            SpeedButton().frame(maxWidth: .infinity, minHeight: 44).background(.white.opacity(0.14), in: .capsule)
+            SleepTimerButton().frame(maxWidth: .infinity, minHeight: 44).background(.white.opacity(0.14), in: .capsule)
+        }
+        .transition(.opacity)
+    }
+
+    /// Podcasts transport: speed · back 15 · play · forward 30 · sleep timer. Narrow screens show only the middle
+    /// three, like Apple Music's outer-screen player.
+    private func transport(narrow: Bool) -> some View {
         HStack {
-            SpeedButton().frame(width: 44)
-            Spacer()
+            if !narrow {
+                SpeedButton().frame(width: 44)
+                Spacer()
+            }
             Button { player.skip(by: -15) } label: { Image(systemName: "gobackward.15").font(.system(size: 30, weight: .medium)) }
                 .accessibilityLabel("Back 15 seconds")
             Spacer()
@@ -229,9 +291,12 @@ struct NowPlayingView: View {
             Spacer()
             Button { player.skip(by: 30) } label: { Image(systemName: "goforward.30").font(.system(size: 30, weight: .medium)) }
                 .accessibilityLabel("Forward 30 seconds")
-            Spacer()
-            SleepTimerButton().frame(width: 44)
+            if !narrow {
+                Spacer()
+                SleepTimerButton().frame(width: 44)
+            }
         }
+        .padding(.horizontal, narrow ? 24 : 0)
         .buttonStyle(.plain)
     }
 
@@ -254,7 +319,9 @@ struct NowPlayingView: View {
     }
 
     private func toggle(_ target: Mode, symbol: String, label: String) -> some View {
-        Button { mode = (mode == target) ? .artwork : target } label: {
+        Button {
+            withAnimation(Self.modeAnimation) { mode = (mode == target) ? .artwork : target }
+        } label: {
             Image(systemName: symbol)
                 .font(.system(size: 19, weight: .semibold))
                 .frame(width: 40, height: 40)
@@ -440,9 +507,9 @@ private struct EpisodeMenu: View {
             }
         } label: {
             Image(systemName: "ellipsis")
-                .font(.system(size: 20, weight: .bold))
-                .frame(width: 32, height: 32)
-                .background(Circle().fill(.white.opacity(0.15)))
+                .font(.system(size: 22, weight: .bold))
+                .frame(width: 36, height: 36)
+                .contentShape(.rect)
         }
         .accessibilityLabel("More")
     }

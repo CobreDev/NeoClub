@@ -80,6 +80,9 @@ final class AudioPlayer {
     private var timeObserver: Any?
     private var endObserver: NSObjectProtocol?
     private var artwork: MPMediaItemArtwork?
+    /// The current episode's artwork, loaded once and shared by the lock screen and Now Playing (so the artwork
+    /// never reloads while it moves between the player and Up Next).
+    private(set) var artworkImage: UIImage?
     private let sync = ProgressSync()
 
     private init() {
@@ -425,9 +428,11 @@ final class AudioPlayer {
 
     private func loadArtwork(_ url: URL?) {
         artwork = nil
+        artworkImage = nil
         guard let url else { return }
         Task {
             guard let (data, _) = try? await URLSession.shared.data(from: url), let image = UIImage(data: data) else { return }
+            artworkImage = image
             artwork = MPMediaItemArtwork(boundsSize: image.size) { _ in image }
             updateNowPlaying()
         }
