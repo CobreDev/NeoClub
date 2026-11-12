@@ -88,6 +88,7 @@ struct EpisodeView: View {
                                 EpisodeRow(episode: e) { player.play(e, groupingID: groupingID) }
                             }
                             .buttonStyle(.plain)
+                            .episodeContextMenu(e, groupingID: groupingID)
                             Divider()
                         }
                     }
@@ -106,15 +107,20 @@ struct EpisodeView: View {
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Menu {
-                    Button {
-                        player.markPlayed(shown)
-                    } label: {
-                        Label("Mark as Played", systemImage: "checkmark.circle")
+                    if player.progress(for: shown)?.isComplete == true {
+                        Button {
+                            player.markUnplayed(shown)
+                        } label: {
+                            Label("Mark as Unplayed", systemImage: "arrow.uturn.backward.circle")
+                        }
+                    } else {
+                        Button {
+                            player.markPlayed(shown)
+                        } label: {
+                            Label("Mark as Played", systemImage: "checkmark.circle")
+                        }
                     }
-                    .disabled(player.progress(for: shown)?.isComplete == true)
-                    if let url = URL(string: "https://app.adventuresinodyssey.com/content/\(shown.id)") {
-                        ShareLink(item: url) { Label("Share Episode", systemImage: "square.and.arrow.up") }
-                    }
+                    ShareLink(item: shown.shareURL) { Label("Share Episode", systemImage: "square.and.arrow.up") }
                 } label: {
                     Label("More", systemImage: "ellipsis")
                 }

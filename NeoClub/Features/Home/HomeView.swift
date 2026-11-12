@@ -106,11 +106,7 @@ private struct Shelf: View {
                             EpisodeCard(episode: episode, width: isContinue ? 200 : 150)
                         }
                         .buttonStyle(.plain)
-                        .contextMenu {
-                            Button("Play", systemImage: "play.fill") {
-                                player.play(episode, queue: queue(after: episode), groupingID: shelf.groupingID)
-                            }
-                        }
+                        .episodeContextMenu(episode, queue: queue(after: episode), groupingID: shelf.groupingID)
                     }
                 }
                 .scrollTargetLayout()
@@ -221,6 +217,7 @@ private struct BookmarksShelf: View {
                                 EpisodeCard(episode: episode, width: 150)
                             }
                             .buttonStyle(.plain)
+                            .episodeContextMenu(episode)
                         }
                     }
                     .scrollTargetLayout()
@@ -324,9 +321,7 @@ private struct NextUpShelf: View {
                                 EpisodeCard(episode: episode, width: 150)
                             }
                             .buttonStyle(.plain)
-                            .contextMenu {
-                                Button("Play", systemImage: "play.fill") { player.play(episode) }
-                            }
+                            .episodeContextMenu(episode)
                         }
                     }
                     .scrollTargetLayout()

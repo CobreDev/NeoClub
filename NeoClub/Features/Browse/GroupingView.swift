@@ -30,6 +30,7 @@ struct GroupingView: View {
                     EpisodeRow(episode: episode) { play(episode) }
                 }
                 .listRowBackground(Color.clear)
+                .episodeContextMenu(episode, groupingID: groupingID)
             }
         }
         .listStyle(.plain)

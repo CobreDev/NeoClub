@@ -26,6 +26,7 @@ struct SearchView: View {
                     ForEach(eps) { hit in
                         NavigationLink(value: Route.episode(Self.stub(hit), groupingID: nil)) { HitRow(hit: hit) }
                             .aioRow()
+                            .episodeContextMenu(Self.stub(hit))
                     }
                 }
             }

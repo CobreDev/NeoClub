@@ -238,3 +238,34 @@ struct SafariView: UIViewControllerRepresentable {
     }
     func updateUIViewController(_ vc: SFSafariViewController, context: Context) {}
 }
+
+extension Episode {
+    /// The episode on the AIO Club website, for sharing.
+    var shareURL: URL { URL(string: "https://app.adventuresinodyssey.com/content/\(id)")! }
+}
+
+/// Long-press menu for an episode anywhere in the app: Play, Mark as Played/Unplayed, Share.
+private struct EpisodeContextMenu: ViewModifier {
+    @Environment(AudioPlayer.self) private var player
+    let episode: Episode
+    let queue: [Episode]
+    let groupingID: String?
+
+    func body(content: Content) -> some View {
+        content.contextMenu {
+            Button("Play", systemImage: "play.fill") { player.play(episode, queue: queue, groupingID: groupingID) }
+            if player.progress(for: episode)?.isComplete == true {
+                Button("Mark as Unplayed", systemImage: "arrow.uturn.backward.circle") { player.markUnplayed(episode) }
+            } else {
+                Button("Mark as Played", systemImage: "checkmark.circle") { player.markPlayed(episode) }
+            }
+            ShareLink(item: episode.shareURL) { Label("Share Episode", systemImage: "square.and.arrow.up") }
+        }
+    }
+}
+
+extension View {
+    func episodeContextMenu(_ episode: Episode, queue: [Episode] = [], groupingID: String? = nil) -> some View {
+        modifier(EpisodeContextMenu(episode: episode, queue: queue, groupingID: groupingID))
+    }
+}

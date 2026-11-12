@@ -65,6 +65,7 @@ struct CharacterView: View {
                                 EpisodeRow(episode: e) { player.play(e) }
                             }
                             .buttonStyle(.plain)
+                            .episodeContextMenu(e)
                             Divider()
                         }
                     }

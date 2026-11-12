@@ -136,6 +136,22 @@ final class AudioPlayer {
         return item.progress
     }
 
+    /// Clears an episode's progress so it reads as new again (status "New" at 0). Only syncs when progress sync is on.
+    func markUnplayed(_ item: Episode) {
+        progressOverrides[item.id] = ListenProgress(status: "New", currentProgress: 0)
+        if finishedHere.remove(item.id) != nil {
+            UserDefaults.standard.set(Array(finishedHere), forKey: "finishedHere")
+        }
+        guard ProgressSync.isEnabled else { return }
+        Task {
+            do {
+                try await AIOService.saveProgress(episodeID: item.id, status: "New", positionMs: 0)
+            } catch {
+                SignInLog.write("mark unplayed failed: \(error.localizedDescription)")
+            }
+        }
+    }
+
     /// Episodes finished in this app on this device, remembered across launches. They count as played everywhere
     /// in the app even when progress sync is off (debug builds), so the account never has to hear about them.
     private(set) var finishedHere: Set<String> = Set(UserDefaults.standard.stringArray(forKey: "finishedHere") ?? [])
@@ -155,6 +171,9 @@ final class AudioPlayer {
         guard ProgressSync.isEnabled else { return }
         Task {
             do {
+                // Lists like search results don't carry the length; the details do.
+                var length = length
+                if length == 0 { length = (try? await AIOService.episode(item.id))?.mediaLength ?? 0 }
                 try await AIOService.saveProgress(episodeID: item.id, status: "Complete", positionMs: length)
             } catch {
                 SignInLog.write("mark played failed: \(error.localizedDescription)")
