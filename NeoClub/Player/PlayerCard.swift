@@ -60,9 +60,9 @@ final class PlayerCardModel {
         withTransaction(tx) { top = fullFrame.minY + max(0, distance) }
     }
 
-    /// Apple Music lets the card glide at the finger's speed for about 80 ms after release (its animator's
-    /// continue phase, measured 66–96 ms) before the collapse springs start.
-    static let releaseCoast: TimeInterval = 0.08
+    /// After the finger lifts, Apple Music's card holds completely still for about 100 ms (its animator's continue
+    /// phase: traced at 66–96 ms, recorded on the vphone Duo at ~110 ms) before the collapse springs start.
+    static let releaseHold: TimeInterval = 0.1
     /// True from release until the card has collapsed (or is opened again).
     private(set) var closing = false
 
@@ -72,12 +72,9 @@ final class PlayerCardModel {
         let gen = generation
         closing = true
         let v = max(0, velocity)
-        // Coast first, at the release speed.
-        if v > 0 {
-            let coastTo = min(miniFrame.minY, top + v * Self.releaseCoast)
-            withAnimation(.linear(duration: Self.releaseCoast)) { top = coastTo }
-        }
-        DispatchQueue.main.asyncAfter(deadline: .now() + (v > 0 ? Self.releaseCoast : 0)) { [weak self] in
+        // A dragged card holds where the finger left it, then collapses.
+        let hold = top > fullFrame.minY + 1 ? Self.releaseHold : 0
+        DispatchQueue.main.asyncAfter(deadline: .now() + hold) { [weak self] in
             guard let self, self.generation == gen else { return }
             let remaining = max(1, self.miniFrame.minY - self.top)
             withAnimation(Self.morphSpring) { self.morph = 1 } completion: { [weak self] in
@@ -100,6 +97,9 @@ struct CardGeometry: ViewModifier, Animatable {
     var top: CGFloat
     var morph: CGFloat
     var face: CGFloat
+    /// Collapsing into the bar: the card keeps (nearly) full width on the way down and only takes the bar's shape
+    /// at the very end, as recorded from Apple Music (about 15% narrower at 90% of the way down).
+    var closing = false
     let full: CGRect
     let mini: CGRect
     /// Global origin of the host's coordinate space, for positioning.
@@ -115,27 +115,38 @@ struct CardGeometry: ViewModifier, Animatable {
     /// How far the card has travelled toward the mini player (0 at the top, 1 at the bar).
     var travel: CGFloat { min(1, max(0, (top - full.minY) / max(1, mini.minY - full.minY))) }
 
+    /// How far the card has taken the bar's size and position. Opening grows it on its own spring (fast, ahead
+    /// of the position); closing ties it to the travel with a steep curve so it narrows only at the end.
+    var shape: CGFloat { closing ? pow(travel, 10) : morph }
+
     var rect: CGRect {
-        let width = full.width + (mini.width - full.width) * morph
-        let midX = full.midX + (mini.midX - full.midX) * morph
-        let height = full.height + (mini.height - full.height) * morph
+        let m = shape
+        let width = full.width + (mini.width - full.width) * m
+        let midX = full.midX + (mini.midX - full.midX) * m
+        let height = full.height + (mini.height - full.height) * m
         return CGRect(x: midX - width / 2, y: top, width: width, height: height)
     }
 
     /// Cross-fade between the full player and the mini player's face, driven by how close the card is to the bar
     /// (both in position and in size), so the card stays solid until the last stretch, like Apple Music.
-    var faceProgress: CGFloat { Self.smoothstep((min(travel, morph) - 0.5) / 0.45) }
+    /// Closing, the bar's face shows as soon as the card nears the bottom (Apple Music shows it inside the card
+    /// before the card has shrunk); opening, it gives way as the card grows.
+    var faceProgress: CGFloat {
+        closing ? Self.smoothstep((travel - 0.7) / 0.25) : Self.smoothstep((min(travel, shape) - 0.5) / 0.45)
+    }
 
     /// 8 pt open, growing with travel and the morph to the mini player's capsule radius.
-    var radius: CGFloat { 8 + (mini.height / 2 - 8) * max(travel, morph) }
+    var radius: CGFloat { 8 + (mini.height / 2 - 8) * max(travel, shape) }
 
     func body(content: Content) -> some View {
         let r = rect
         let face = faceProgress
         content
             .environment(\.playerCardFace, face)
-            // The player is laid out at full-screen size, pinned to the card's top edge and centered on it…
+            // The player is laid out at full-screen size and scaled with the card's width (Apple Music scales the
+            // whole player as the card grows out of the bar, rather than cropping it), pinned to the card's top…
             .frame(width: full.width, height: full.height)
+            .scaleEffect(r.width / max(1, full.width), anchor: .top)
             .frame(width: r.width, height: r.height, alignment: .top)
             // …and the mini player's face cross-fades in at the top as the card turns into the bar.
             .overlay(alignment: .top) {
@@ -198,7 +209,7 @@ struct PlayerCardHost: View {
                 if player.hasItem {
                     CardContent(insets: insets)
                         .modifier(CardGeometry(top: model.top, morph: model.morph, face: model.face,
-                                               full: full, mini: mini, origin: safe.origin))
+                                               closing: model.closing, full: full, mini: mini, origin: safe.origin))
                         .opacity(model.visible ? 1 : 0)
                         .allowsHitTesting(model.visible)
                         .gesture(dismissDrag())
