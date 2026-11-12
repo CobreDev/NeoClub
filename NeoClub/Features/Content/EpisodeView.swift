@@ -9,6 +9,9 @@ struct EpisodeView: View {
     @State private var detail: Episode?
     @State private var error: String?
     @State private var expanded = false
+    /// The page's size and top inset, for sizing and placing the artwork like Apple Music.
+    @State private var page: CGSize = .zero
+    @State private var topInset: CGFloat = 0
 
     private var shown: Episode { detail ?? episode }
     private var isCurrent: Bool { player.episode?.id == shown.id }
@@ -16,26 +19,7 @@ struct EpisodeView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 22) {
-                VStack(spacing: 14) {
-                    Artwork(url: shown.artworkURL, cornerRadius: 14)
-                        // At most 280pt, and no more than ~45% of a short screen (half-folded iPhone Duo).
-                        .containerRelativeFrame(.vertical) { h, _ in min(280, h * 0.45) }
-                        .shadow(color: .black.opacity(0.2), radius: 18, y: 10)
-                    if let album = shown.albumTitle {
-                        Text(album.uppercased())
-                            .font(.universBold(12, relativeTo: .caption))
-                            .foregroundStyle(.secondary)
-                    }
-                    Text(shown.title)
-                        .font(.jacoby(28, relativeTo: .title))
-                        .multilineTextAlignment(.center)
-                    Text(shown.subtitle)
-                        .font(.univers(15))
-                        .foregroundStyle(.secondary)
-                    ProgressIndicator(progress: player.progress(for: shown), durationMs: shown.mediaLength)
-                    actions
-                }
-                .frame(maxWidth: .infinity)
+                header
 
                 if let text = shown.description, !text.isEmpty {
                     Text(text)
@@ -102,6 +86,8 @@ struct EpisodeView: View {
             .frame(maxWidth: 720)
             .frame(maxWidth: .infinity)
         }
+        .onGeometryChange(for: CGSize.self) { $0.size } action: { page = $0 }
+        .onGeometryChange(for: CGFloat.self) { $0.safeAreaInsets.top } action: { topInset = $0 }
         .aioBackground(artworkURL: shown.artworkURL)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
@@ -129,28 +115,59 @@ struct EpisodeView: View {
         .task { await load() }
     }
 
-    private var actions: some View {
-        HStack(spacing: 12) {
-            if shown.isPlayable {
-            Button {
-                if isCurrent { player.togglePlayPause() } else { player.play(shown, queue: queueAfter, groupingID: groupingID) }
-            } label: {
-                Label(playLabel, systemImage: isCurrent && player.isPlaying ? "pause.fill" : "play.fill")
-                    .font(.universBold(17))
-                    .frame(minWidth: 140)
-                    .padding(.vertical, 4)
+    /// Apple Music's album header (measured on the iPhone Duo's inner screen): artwork ~69% of the width, its top
+    /// tucked ~26 pt up under the toolbar (56 pt from the screen's top); the title ~26 pt under the art; the album
+    /// where Music has the artist; the episode number and length where Music has genre · year · format (small, semibold,
+    /// muted); then a 48 pt circle, a 160 × 48 pt play pill and a 48 pt circle, 15 pt apart.
+    private var header: some View {
+        let side = page == .zero ? 280 : min(page.width * 0.69, page.height * 0.5, 520)
+        return VStack(spacing: 0) {
+            Artwork(url: shown.artworkURL, cornerRadius: 10)
+                .frame(width: side, height: side)
+                .shadow(color: .black.opacity(0.25), radius: 20, y: 10)
+            Text(shown.title)
+                .font(.jacoby(24, relativeTo: .title2))
+                .multilineTextAlignment(.center)
+                .padding(.top, 20)
+            if let album = shown.albumTitle {
+                Text(album)
+                    .font(.univers(21, relativeTo: .title3))
+                    .multilineTextAlignment(.center)
+                    .lineLimit(2)
+                    .padding(.top, 2)
             }
-            .aioPrimaryButton()
+            Text(shown.subtitle)
+                .font(.universBold(13, relativeTo: .footnote))
+                .foregroundStyle(.secondary)
+                .padding(.top, 4)
+            ProgressIndicator(progress: player.progress(for: shown), durationMs: shown.mediaLength, barWidth: 72)
+                .padding(.top, 8)
+            actions.padding(.top, 14)
+        }
+        .frame(maxWidth: .infinity)
+        // Up under the toolbar, as Music's artwork is (its top sits 56 pt from the screen's top on the inner screen).
+        .padding(.top, -26)
+    }
 
-            downloadButton
-            BookmarkButton(episode: shown)
+    private var actions: some View {
+        HStack(spacing: 15) {
+            if shown.isPlayable {
+                BookmarkButton(episode: shown, size: 48)
+                Button {
+                    if isCurrent { player.togglePlayPause() } else { player.play(shown, queue: queueAfter, groupingID: groupingID) }
+                } label: {
+                    Label(playLabel, systemImage: isCurrent && player.isPlaying ? "pause.fill" : "play.fill")
+                        .font(.universBold(17))
+                        .frame(width: 136, height: 36)
+                }
+                .aioPrimaryButton()
+                downloadButton
             }
         }
-        .padding(.top, 4)
     }
 
     @ViewBuilder private var downloadButton: some View {
-        DownloadButton(episodes: [shown], size: 44)
+        DownloadButton(episodes: [shown], size: 48)
             .disabled(!shown.isAudio && detail != nil && !downloads.isDownloaded(shown.id))
     }
 

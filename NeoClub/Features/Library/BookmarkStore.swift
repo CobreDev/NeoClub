@@ -64,15 +64,31 @@ final class BookmarkStore {
 struct BookmarkButton: View {
     @Environment(BookmarkStore.self) private var bookmarks
     let episode: Episode
+    /// Drawn as a glass circle of this diameter (the side buttons of Apple Music's album header).
+    var size: CGFloat?
 
     var body: some View {
         let on = bookmarks.isBookmarked(episode)
-        Button { bookmarks.toggle(episode) } label: {
-            Image(systemName: on ? "bookmark.fill" : "bookmark")
-                .font(.title2)
-                .contentTransition(.symbolEffect(.replace))
+        if let size {
+            Button { bookmarks.toggle(episode) } label: {
+                Image(systemName: on ? "bookmark.fill" : "bookmark")
+                    .font(.system(size: size * 0.4, weight: .semibold))
+                    .contentTransition(.symbolEffect(.replace))
+                    .frame(width: size, height: size)
+                    .foregroundStyle(.white)
+                    .contentShape(.circle)
+            }
+            .buttonStyle(.plain)
+            .glassEffect(.regular.interactive(), in: .circle)
+            .accessibilityLabel(on ? "Remove Bookmark" : "Bookmark")
+        } else {
+            Button { bookmarks.toggle(episode) } label: {
+                Image(systemName: on ? "bookmark.fill" : "bookmark")
+                    .font(.title2)
+                    .contentTransition(.symbolEffect(.replace))
+            }
+            .buttonStyle(.glass)
+            .accessibilityLabel(on ? "Remove Bookmark" : "Bookmark")
         }
-        .buttonStyle(.glass)
-        .accessibilityLabel(on ? "Remove Bookmark" : "Bookmark")
     }
 }

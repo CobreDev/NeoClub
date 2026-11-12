@@ -52,6 +52,7 @@ struct Artwork: View {
 struct ProgressIndicator: View {
     let progress: ListenProgress?
     let durationMs: Int?
+    var barWidth: CGFloat = 44
 
     var body: some View {
         if let progress, progress.isComplete {
@@ -66,7 +67,7 @@ struct ProgressIndicator: View {
                     .overlay(alignment: .leading) {
                         GeometryReader { g in Capsule().fill(Color.aioYellow).frame(width: g.size.width * fraction) }
                     }
-                    .frame(width: 44, height: 4)
+                    .frame(width: barWidth, height: 4)
                 Text("\(max(1, (total - (progress.currentProgress ?? 0)) / 60_000)) min left")
                     .font(.univers(12, relativeTo: .caption))
                     .foregroundStyle(.secondary)
