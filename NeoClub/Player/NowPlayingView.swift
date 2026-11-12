@@ -87,7 +87,8 @@ struct NowPlayingView: View {
             grabber(large: large)
             VStack(spacing: 0) {
                 if mode == .artwork {
-                    Spacer(minLength: 22)
+                    // Music's artwork starts ~14 pt under the grabber on the Duo's 466 × 678 pt inner screen.
+                    Spacer(minLength: large ? 22 : 14)
                     // Up to the column width, smaller when the screen is short, so the controls below never move.
                     bigArtwork.frame(maxWidth: content, maxHeight: content)
                     titleRow(large: large).padding(.top, 21)
@@ -112,7 +113,7 @@ struct NowPlayingView: View {
     /// screenshot of Music: title caps at 673, album 699, scrubber 749, transport 822, volume 896, buttons 965).
     private func controls(narrow: Bool, large: Bool) -> some View {
         VStack(spacing: 0) {
-            ScrubberBar().padding(.top, large ? 16.5 : 7)
+            ScrubberBar().padding(.top, large ? 16.5 : 11)
             transport(narrow: narrow).padding(.top, large ? 11 : 0)
             VolumeBar().padding(.top, large ? 31 : 26)
             bottomBar.padding(.top, large ? 34 : 22)
@@ -223,9 +224,14 @@ struct NowPlayingView: View {
         artworkImage(cornerRadius: 10)
             .matchedGeometryEffect(id: "artwork", in: ns)
             .shadow(color: .black.opacity(player.isPlaying ? 0.45 : 0.2), radius: player.isPlaying ? 28 : 10, y: 14)
-            // Paused, Apple Music shrinks the artwork to ~73% (measured on the vphone Duo's inner screen).
+            // Paused, Apple Music shrinks the artwork to ~73%. Fitted from a 60 fps recording of Music on the Duo:
+            // playing, it grows on a bouncy spring (~11% overshoot) a beat after the button's glyph swaps;
+            // pausing, it shrinks on a nearly critically damped spring with no overshoot.
             .scaleEffect(player.isPlaying ? 1 : 0.73)
-            .animation(.spring(response: 0.5, dampingFraction: 0.7), value: player.isPlaying)
+            .animation(player.isPlaying
+                       ? .spring(response: 0.45, dampingFraction: 0.56).delay(0.1)
+                       : .spring(response: 0.5, dampingFraction: 0.95).delay(0.05),
+                       value: player.isPlaying)
     }
 
     private var panel: some View {
@@ -304,19 +310,8 @@ struct NowPlayingView: View {
             Button { player.skip(by: -15) } label: { Image(systemName: "gobackward.15").font(.system(size: 30, weight: .medium)) }
                 .accessibilityLabel("Back 15 seconds")
             Spacer()
-            Button { player.togglePlayPause() } label: {
-                ZStack {
-                    if player.isLoading {
-                        ProgressView().tint(.white).controlSize(.large)
-                    } else {
-                        Image(systemName: player.isPlaying ? "pause.fill" : "play.fill")
-                            .font(.system(size: 46))
-                            .contentTransition(.symbolEffect(.replace))
-                    }
-                }
-                .frame(width: 64, height: 56)
-            }
-            .accessibilityLabel(player.isPlaying ? "Pause" : "Play")
+            // Music's pause bars are ~30 pt tall on the Duo's inner screen (38 pt type); larger on a big layout.
+            PlayPauseButton(size: narrow ? 38 : 46)
             Spacer()
             Button { player.skip(by: 30) } label: { Image(systemName: "goforward.30").font(.system(size: 30, weight: .medium)) }
                 .accessibilityLabel("Forward 30 seconds")
@@ -758,5 +753,85 @@ struct NowPlayingBackdrop: View {
             .overlay(LinearGradient(colors: [.black.opacity(0.1), .black.opacity(0.45)], startPoint: .top, endPoint: .bottom))
             .clipped()
             .ignoresSafeArea()
+    }
+}
+
+/// Apple Music's play/pause button, from a 60 fps recording on the Duo: touching it fades in a faint ~60 pt
+/// circle behind the glyph; on release the glyph dims and shrinks to nothing (~70 ms), swaps, and grows back while
+/// brightening (~0.25 s); the circle lingers ~130 ms after release, then fades.
+private struct PlayPauseButton: View {
+    @Environment(AudioPlayer.self) private var player
+    let size: CGFloat
+
+    @State private var shownPlaying: Bool?
+    @State private var glyphScale: CGFloat = 1
+    @State private var dimmed = false
+    @State private var pressed = false
+    @State private var highlighted = false
+    @State private var pressCount = 0
+
+    var body: some View {
+        Button {
+            player.togglePlayPause()
+            // A quick tap may never register as held; show the circle anyway (Music always does).
+            if !highlighted { showHighlight() ; releaseHighlight() }
+        } label: {
+            ZStack {
+                Circle().fill(.white.opacity(0.08))
+                    .frame(width: 60, height: 60)
+                    .opacity(highlighted ? 1 : 0)
+                if player.isLoading {
+                    ProgressView().tint(.white).controlSize(.large)
+                } else {
+                    Image(systemName: (shownPlaying ?? player.isPlaying) ? "pause.fill" : "play.fill")
+                        .font(.system(size: size))
+                        .scaleEffect(glyphScale)
+                        .opacity(dimmed ? 0.7 : 1)
+                }
+            }
+            .frame(width: 64, height: 56)
+            .contentShape(.rect)
+        }
+        .buttonStyle(PressReporting(pressed: $pressed))
+        .accessibilityLabel(player.isPlaying ? "Pause" : "Play")
+        .onChange(of: player.isPlaying) { _, playing in swapGlyph(to: playing) }
+        .onChange(of: pressed) { _, down in
+            if down { showHighlight() } else { releaseHighlight() }
+        }
+    }
+
+    private func showHighlight() {
+        pressCount += 1
+        withAnimation(.easeOut(duration: 0.07)) { highlighted = true }
+    }
+
+    private func releaseHighlight() {
+        pressCount += 1
+        let n = pressCount
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+            guard n == pressCount else { return }
+            withAnimation(.easeOut(duration: 0.17)) { highlighted = false }
+        }
+    }
+
+    /// Shrinks to ~20% while dimming, swaps, and grows straight back (no pause at the smallest size).
+    private func swapGlyph(to playing: Bool) {
+        withAnimation(.easeIn(duration: 0.07)) {
+            glyphScale = 0.2
+            dimmed = true
+        } completion: {
+            shownPlaying = playing
+            withAnimation(.easeOut(duration: 0.2)) { glyphScale = 1 }
+            withAnimation(.easeOut(duration: 0.22)) { dimmed = false }
+        }
+    }
+
+    /// Plain button that reports whether it's held down (no system dimming; the circle shows the press).
+    private struct PressReporting: ButtonStyle {
+        @Binding var pressed: Bool
+        func makeBody(configuration: Configuration) -> some View {
+            configuration.label
+                .onChange(of: configuration.isPressed) { _, down in pressed = down }
+        }
     }
 }
