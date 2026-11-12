@@ -4,6 +4,7 @@ struct HomeView: View {
     @Environment(AppModel.self) private var app
     @Environment(AudioPlayer.self) private var player
     @Environment(BookmarkStore.self) private var bookmarks
+    @State private var nextUp = NextUpStore.shared
     @State private var home: HomeResponse?
     @State private var error: String?
     @State private var showAccount = false
@@ -18,10 +19,16 @@ struct HomeView: View {
                 if let shelves = home?.playlists {
                     ForEach(Array(shelves.enumerated()), id: \.element.id) { i, shelf in
                         Shelf(shelf: shelf)
-                        // Bookmarks sit right after "Continue Listening" (or first if there isn't one).
-                        if i == 0 { BookmarksShelf() }
+                        // Next Up and Bookmarks sit right after "Continue Listening" (or first if there isn't one).
+                        if i == 0 {
+                            NextUpShelf(store: nextUp)
+                            BookmarksShelf()
+                        }
                     }
-                    if shelves.isEmpty { BookmarksShelf() }
+                    if shelves.isEmpty {
+                        NextUpShelf(store: nextUp)
+                        BookmarksShelf()
+                    }
                 } else if let error {
                     ErrorView(message: error) { await load() }
                 } else {
@@ -57,6 +64,8 @@ struct HomeView: View {
         do {
             home = try await AIOService.home()
             error = nil
+            let continuing = home?.playlists?.first { $0.name?.hasPrefix("Continue where you left off") == true }
+            await nextUp.refresh(continuing: continuing?.contentList ?? [], history: player.history.map(\.id))
         } catch {
             self.error = error.localizedDescription
         }
@@ -210,6 +219,75 @@ private struct BookmarksShelf: View {
                                 EpisodeCard(episode: episode, width: 150)
                             }
                             .buttonStyle(.plain)
+                        }
+                    }
+                    .scrollTargetLayout()
+                    .padding(.horizontal, 20)
+                }
+                .scrollTargetBehavior(.viewAligned)
+            }
+        }
+    }
+}
+
+/// "Next Up": the next unplayed episode after each one you're in the middle of or played recently, in album order.
+/// Reads the album track list that comes with each episode's details (with this profile's progress on every track).
+@MainActor
+@Observable
+final class NextUpStore {
+    static let shared = NextUpStore()
+    private(set) var episodes: [Episode] = []
+    private var lastSeeds: [String] = []
+
+    func refresh(continuing: [Episode], history: [String]) async {
+        // Most recent first: what's in progress on the account, then what was played here.
+        var seeds: [String] = []
+        for id in continuing.map(\.id) + history where !seeds.contains(id) { seeds.append(id) }
+        seeds = Array(seeds.prefix(5))
+        guard seeds != lastSeeds || episodes.isEmpty else { return }
+        lastSeeds = seeds
+
+        let details = await withTaskGroup(of: (Int, Episode?).self) { group in
+            for (i, id) in seeds.enumerated() {
+                group.addTask { (i, try? await AIOService.episode(id)) }
+            }
+            var out: [(Int, Episode?)] = []
+            for await r in group { out.append(r) }
+            return out.sorted { $0.0 < $1.0 }.compactMap(\.1)
+        }
+        let inProgress = Set(continuing.map(\.id))
+        var next: [Episode] = []
+        for detail in details {
+            guard let album = detail.inAlbum, let i = album.firstIndex(where: { $0.id == detail.id }) else { continue }
+            let candidate = album.dropFirst(i + 1).first { e in
+                !(e.progress?.isComplete ?? false) && !(e.progress?.isInProgress ?? false) && !inProgress.contains(e.id)
+            }
+            if let candidate, !next.contains(where: { $0.id == candidate.id }) { next.append(candidate) }
+        }
+        episodes = next
+    }
+}
+
+/// Home shelf for `NextUpStore`.
+private struct NextUpShelf: View {
+    @Environment(AudioPlayer.self) private var player
+    let store: NextUpStore
+
+    var body: some View {
+        let items = store.episodes.filter { !(player.progress(for: $0)?.isComplete ?? false) }
+        if !items.isEmpty {
+            VStack(alignment: .leading, spacing: 12) {
+                ShelfHeader(title: "Next Up")
+                ScrollView(.horizontal, showsIndicators: false) {
+                    LazyHStack(alignment: .top, spacing: 14) {
+                        ForEach(items) { episode in
+                            NavigationLink(value: Route.episode(episode, groupingID: nil)) {
+                                EpisodeCard(episode: episode, width: 150)
+                            }
+                            .buttonStyle(.plain)
+                            .contextMenu {
+                                Button("Play", systemImage: "play.fill") { player.play(episode) }
+                            }
                         }
                     }
                     .scrollTargetLayout()
