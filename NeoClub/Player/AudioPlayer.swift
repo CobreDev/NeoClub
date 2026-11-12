@@ -10,6 +10,9 @@ final class AudioPlayer {
 
     private(set) var episode: Episode?
     private(set) var queue: [Episode] = []
+    /// How many episodes at the front of `queue` were added with Play Next / Play Last (Apple Music's "Playing
+    /// Next"); the rest is the album or list the current episode was started from.
+    private(set) var addedCount = 0
     private(set) var isPlaying = false
     private(set) var isLoading = false
     private(set) var position: Double = 0
@@ -266,7 +269,37 @@ final class AudioPlayer {
 
     /// Plays an episode, resuming from the profile's saved position. `queue` is the rest of its album/list.
     func play(_ item: Episode, queue: [Episode] = [], groupingID: String? = nil) {
+        addedCount = 0
+        start(item, queue: queue, groupingID: groupingID)
+    }
+
+    private func start(_ item: Episode, queue: [Episode], groupingID: String?) {
         Task { await load(item, queue: queue, groupingID: groupingID) }
+    }
+
+    /// Apple Music's Play Next: plays right after the current episode, ahead of anything queued before.
+    /// With nothing loaded, it just plays.
+    func queueNext(_ item: Episode) {
+        guard episode != nil else { play(item); return }
+        removeFromQueue(item)
+        queue.insert(item, at: 0)
+        addedCount += 1
+        updateNowPlaying()
+    }
+
+    /// Apple Music's Play Last: after the other episodes you've added, before the rest of the album.
+    func queueLast(_ item: Episode) {
+        guard episode != nil else { play(item); return }
+        removeFromQueue(item)
+        queue.insert(item, at: addedCount)
+        addedCount += 1
+        updateNowPlaying()
+    }
+
+    private func removeFromQueue(_ item: Episode) {
+        guard let i = queue.firstIndex(where: { $0.id == item.id }) else { return }
+        queue.remove(at: i)
+        if i < addedCount { addedCount -= 1 }
     }
 
     func togglePlayPause() { isPlaying ? pause() : resume() }
@@ -303,13 +336,15 @@ final class AudioPlayer {
     func playNext() {
         guard !queue.isEmpty else { return }
         let next = queue.removeFirst()
-        play(next, queue: queue, groupingID: groupingID)
+        addedCount = max(0, addedCount - 1)
+        start(next, queue: queue, groupingID: groupingID)
     }
 
     /// Jumps to an episode in Up Next, keeping the episodes after it queued.
     func playQueued(_ item: Episode) {
         guard let i = queue.firstIndex(where: { $0.id == item.id }) else { return }
-        play(item, queue: Array(queue.dropFirst(i + 1)), groupingID: groupingID)
+        addedCount = max(0, addedCount - (i + 1))
+        start(item, queue: Array(queue.dropFirst(i + 1)), groupingID: groupingID)
     }
 
     /// Replays something from History (its album context isn't kept, so nothing is queued after it).
@@ -338,6 +373,7 @@ final class AudioPlayer {
         player.replaceCurrentItem(with: nil)
         episode = nil
         queue = []
+        addedCount = 0
         isPlaying = false
         position = 0
         duration = 0

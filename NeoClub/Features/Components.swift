@@ -279,6 +279,12 @@ private struct EpisodeContextMenu<Extra: View>: ViewModifier {
     func body(content: Content) -> some View {
         content.contextMenu {
             Button("Play", systemImage: "play.fill") { player.play(episode, queue: queue, groupingID: groupingID) }
+            if episode.isPlayable {
+                Section {
+                    Button("Play Next", systemImage: "text.line.first.and.arrowtriangle.forward") { player.queueNext(episode) }
+                    Button("Play Last", systemImage: "text.line.last.and.arrowtriangle.forward") { player.queueLast(episode) }
+                }
+            }
             if player.progress(for: episode)?.isComplete == true {
                 Button("Mark as Unplayed", systemImage: "arrow.uturn.backward.circle") { player.markUnplayed(episode) }
             } else {
@@ -290,7 +296,29 @@ private struct EpisodeContextMenu<Extra: View>: ViewModifier {
     }
 }
 
+/// Apple Music's leading swipe on a song row: Play Next (purple) and Play Last (orange).
+private struct QueueSwipeActions: ViewModifier {
+    @Environment(AudioPlayer.self) private var player
+    let episode: Episode
+
+    func body(content: Content) -> some View {
+        if episode.isPlayable {
+            content.swipeActions(edge: .leading) {
+                Button("Play Next", systemImage: "text.line.first.and.arrowtriangle.forward") { player.queueNext(episode) }
+                    .tint(.purple)
+                Button("Play Last", systemImage: "text.line.last.and.arrowtriangle.forward") { player.queueLast(episode) }
+                    .tint(.orange)
+            }
+        } else {
+            content
+        }
+    }
+}
+
 extension View {
+    /// Play Next / Play Last on a leading swipe (rows in a `List`).
+    func queueSwipeActions(_ episode: Episode) -> some View { modifier(QueueSwipeActions(episode: episode)) }
+
     func episodeContextMenu<Extra: View>(_ episode: Episode, queue: [Episode] = [], groupingID: String? = nil,
                                          @ViewBuilder extra: () -> Extra = { EmptyView() }) -> some View {
         modifier(EpisodeContextMenu(episode: episode, queue: queue, groupingID: groupingID, extra: extra()))

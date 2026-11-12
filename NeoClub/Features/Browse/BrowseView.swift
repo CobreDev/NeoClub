@@ -30,7 +30,9 @@ struct BrowseView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 28) {
-                if !store.newAlbums.isEmpty {
+                // Shown (as placeholders) until the albums have loaded, so the categories don't move down under a
+                // finger when the shelf arrives.
+                if !store.newAlbums.isEmpty || !store.albumsSettled {
                     VStack(alignment: .leading, spacing: 12) {
                         NavigationLink(value: Route.groupingList(type: "Album", title: "Albums", filter: .regularAlbums)) {
                             HStack(spacing: 4) {
@@ -42,6 +44,20 @@ struct BrowseView: View {
                         .padding(.horizontal, 20)
                         ScrollView(.horizontal) {
                             LazyHStack(alignment: .top, spacing: 14) {
+                                if store.newAlbums.isEmpty {
+                                    ForEach(0..<6, id: \.self) { _ in
+                                        VStack(alignment: .leading, spacing: 6) {
+                                            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                                .fill(.white.opacity(0.08))
+                                                .aspectRatio(1, contentMode: .fit)
+                                            Text(verbatim: "Placeholder album title")
+                                                .font(.univers(13, relativeTo: .footnote))
+                                                .lineLimit(2, reservesSpace: true)
+                                                .redacted(reason: .placeholder)
+                                        }
+                                        .shelfItem()
+                                    }
+                                }
                                 ForEach(store.newAlbums) { g in
                                     NavigationLink(value: Route.grouping(id: g.groupingID ?? "", preview: g)) {
                                         VStack(alignment: .leading, spacing: 6) {
@@ -155,6 +171,8 @@ final class BrowseStore {
     static let shared = BrowseStore()
     private(set) var newAlbums: [Grouping] = []
     private(set) var covers: [String: [URL]] = [:]
+    /// The first albums request has finished (with or without albums).
+    private(set) var albumsSettled = false
     private var loaded = false
 
     func load() async {
@@ -175,6 +193,7 @@ final class BrowseStore {
         } else {
             loaded = false
         }
+        albumsSettled = true
         await withTaskGroup(of: (String, [URL]).self) { group in
             for c in BrowseView.categories where c.type != "Album" {
                 group.addTask {

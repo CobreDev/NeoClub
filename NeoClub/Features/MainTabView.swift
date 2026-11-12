@@ -259,17 +259,14 @@ struct MiniPlayer: View {
 struct NowPlayingPresentation: View {
     @Environment(AudioPlayer.self) private var player
     @State private var card = PresentedCard()
-
     /// The screen's insets, from the window: inside the growing card the view's own safe area is measured in its
-    /// scaled space and comes out huge, which pushed the player's contents off the card while it opened.
-    private var screenInsets: EdgeInsets {
-        let w = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.flatMap(\.windows).first { $0.isKeyWindow }
-        let i = w?.safeAreaInsets ?? .zero
-        return EdgeInsets(top: i.top, leading: i.left, bottom: i.bottom, trailing: i.right)
-    }
+    /// scaled space and comes out huge, which pushed the player's contents off the card while it opened. Kept current
+    /// when the window changes (split view on the Duo, rotation): this view is built once and reused, so reading
+    /// them once left the margins of wherever the app was when it launched (e.g. the status bar column's space on the
+    /// right after moving to the left half).
+    @State private var insets = WindowInsetsProbe.current
 
     var body: some View {
-        let insets = screenInsets
         NowPlayingView(drawsBackground: false, insets: insets)
             .padding(insets)
             // Edge to edge behind the padded player (there's no system safe area here for it to extend into).
@@ -277,6 +274,7 @@ struct NowPlayingPresentation: View {
             .ignoresSafeArea()
             // Kept built between opens: idle (no scrolling titles, no scrubber updates) while it's closed.
             .environment(\.isOnScreen, NowPlayingPresenter.shared.isPresented)
+            .background(WindowInsetsProbe { if $0 != insets { insets = $0 } })
             .background(PresentedControllerReader { [player] vc in
                 card.attach(to: vc) { player.showNowPlaying = false }
             })
@@ -389,6 +387,35 @@ final class PresentedCard: NSObject, UIGestureRecognizerDelegate {
             c.center = rest
             c.layer.cornerRadius = 0
         }
+    }
+}
+
+/// Reports the window's safe-area insets whenever the window's layout changes.
+private struct WindowInsetsProbe: UIViewRepresentable {
+    let changed: (EdgeInsets) -> Void
+
+    @MainActor static var current: EdgeInsets {
+        let w = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.flatMap(\.windows).first { $0.isKeyWindow }
+        return edge(w?.safeAreaInsets ?? .zero)
+    }
+
+    static func edge(_ i: UIEdgeInsets) -> EdgeInsets { EdgeInsets(top: i.top, leading: i.left, bottom: i.bottom, trailing: i.right) }
+
+    func makeUIView(context: Context) -> Probe { Probe(changed: changed) }
+    func updateUIView(_ view: Probe, context: Context) { view.changed = changed }
+
+    final class Probe: UIView {
+        var changed: (EdgeInsets) -> Void
+        init(changed: @escaping (EdgeInsets) -> Void) { self.changed = changed; super.init(frame: .zero); isUserInteractionEnabled = false }
+        required init?(coder: NSCoder) { fatalError() }
+        private func report() {
+            guard let w = window else { return }
+            let i = WindowInsetsProbe.edge(w.safeAreaInsets)
+            DispatchQueue.main.async { [changed] in changed(i) }
+        }
+        override func didMoveToWindow() { super.didMoveToWindow(); report() }
+        override func layoutSubviews() { super.layoutSubviews(); report() }
+        override func safeAreaInsetsDidChange() { super.safeAreaInsetsDidChange(); report() }
     }
 }
 

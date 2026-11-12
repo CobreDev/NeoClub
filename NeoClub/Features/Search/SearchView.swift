@@ -54,6 +54,7 @@ struct SearchView: View {
                         NavigationLink(value: Route.episode(Self.stub(hit), groupingID: nil)) { HitRow(hit: hit) }
                             .aioRow()
                             .episodeContextMenu(Self.stub(hit))
+                            .queueSwipeActions(Self.stub(hit))
                     }
                 }
             }

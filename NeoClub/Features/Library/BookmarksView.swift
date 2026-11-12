@@ -26,6 +26,7 @@ struct BookmarksList: View {
             }
             .aioRow()
             .episodeContextMenu(episode)
+            .queueSwipeActions(episode)
             .swipeActions {
                 Button("Remove", systemImage: "bookmark.slash", role: .destructive) { bookmarks.toggle(episode) }
             }

@@ -31,6 +31,7 @@ struct GroupingView: View {
                 }
                 .listRowBackground(Color.clear)
                 .episodeContextMenu(episode, groupingID: groupingID)
+                .queueSwipeActions(episode)
             }
         }
         .listStyle(.plain)
