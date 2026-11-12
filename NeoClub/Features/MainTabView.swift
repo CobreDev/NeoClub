@@ -6,6 +6,8 @@ struct MainTabView: View {
     @Environment(DownloadStore.self) private var downloads
 
     enum TabID: Hashable { case home, browse, library, search }
+    /// #001 Whit's Flop: the only episode to play while testing (progress syncs to the account).
+    static let testEpisodeID = "a354W0000046TjUQAU"
     @Environment(NetworkMonitor.self) private var network
     @Environment(BookmarkStore.self) private var bookmarks
     @State private var tab: TabID = NetworkMonitor.shared.isOnline ? .home : .library
@@ -22,12 +24,11 @@ struct MainTabView: View {
             // The mini player is always there: bring back whatever was playing last (paused).
             .task { player.restoreLastSession() }
         #if DEBUG
-        // Developer convenience: `-debugResumeLast` resumes the most recent episode on launch (progress sync is off in debug).
+        // Developer convenience. Progress syncs, so test playback is always Whit's Flop: `-debugPlayTest` plays it.
         .task {
             let args = ProcessInfo.processInfo.arguments
-            if args.contains("-debugResumeLast"), !player.hasItem,
-               let last = player.history.first {
-                player.playFromHistory(last)
+            if args.contains("-debugPlayTest"), let test = try? await AIOService.episode(Self.testEpisodeID) {
+                player.play(test)
             }
             // `-debugTab browse|library|search` opens that tab on launch.
             if let i = args.firstIndex(of: "-debugTab"), i + 1 < args.count {

@@ -5,23 +5,15 @@ import Foundation
 /// Rules:
 /// - Nothing is written for an episode that was only opened: real playback must happen first.
 /// - Progress is reported every 30 s while playing, on pause/switch, and on finish.
-/// - Debug builds default to NOT syncing, so testing never touches real listening history.
+/// - On by default in every build (switch in Account). Testing plays only Whit's Flop (`-debugPlayTest`), so it never
+///   touches real listening history.
 @MainActor
 final class ProgressSync {
     static let enabledKey = "syncProgress"
 
-    /// Release builds sync by default; debug builds must opt in (Library → Developer).
+    /// On unless turned off in Account.
     static var isEnabled: Bool {
-        get {
-            if UserDefaults.standard.object(forKey: enabledKey) == nil {
-                #if DEBUG
-                return false
-                #else
-                return true
-                #endif
-            }
-            return UserDefaults.standard.bool(forKey: enabledKey)
-        }
+        get { UserDefaults.standard.object(forKey: enabledKey) as? Bool ?? true }
         set { UserDefaults.standard.set(newValue, forKey: enabledKey) }
     }
 
