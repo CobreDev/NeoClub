@@ -10,8 +10,12 @@ import UIKit
 /// - **Close**: handed to the system zoom transition from the mini player, which morphs the card into the bar's
 ///   Liquid Glass with the system's landing bounce, exactly as before.
 @MainActor
+@Observable
 final class NowPlayingPresenter: NSObject {
     static let shared = NowPlayingPresenter()
+
+    /// True while Now Playing is open (the player idles while it's closed).
+    private(set) var isPresented = false
 
     private var presented: UIHostingController<AnyView>?
     private var openAnimator = OpenAnimator()
@@ -78,12 +82,14 @@ final class NowPlayingPresenter: NSObject {
         vc.transitioningDelegate = self
         openAnimator.source = accessoryView()?.convert(accessoryView()?.bounds ?? .zero, to: nil)
         presented = vc
+        isPresented = true
         root.present(vc, animated: true)
     }
 
     private func dismiss() {
         guard let vc = presented else { return }
         presented = nil
+        isPresented = false
         // The close is the system zoom transition into the bar (its Liquid Glass landing).
         vc.transitioningDelegate = nil
         let options = UIViewController.Transition.ZoomOptions()

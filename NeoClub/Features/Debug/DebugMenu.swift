@@ -5,7 +5,6 @@ struct DebugMenu: View {
     @Environment(DownloadStore.self) private var downloads
     @State private var syncProgress = ProgressSync.isEnabled
     @State private var exportDownloads = DownloadStore.exportsToFiles
-    @AppStorage(NowPlayingPresentation.nativeKey) private var nativeNowPlaying = true
 
     var body: some View {
         Section("Debug") {
@@ -17,9 +16,6 @@ struct DebugMenu: View {
                 Label("Show Downloads in Files", systemImage: "folder")
             }
             .onChange(of: exportDownloads) { _, on in downloads.setExportsToFiles(on) }
-            Toggle(isOn: $nativeNowPlaying) {
-                Label("System Now Playing Transition", systemImage: "rectangle.portrait.and.arrow.forward")
-            }
         }
     }
 }

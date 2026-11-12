@@ -16,10 +16,6 @@ struct MainTabView: View {
     /// moves the app to the inner screen).
     @SceneStorage("sceneState") private var storedScene: Data?
     @State private var restored = false
-    /// The mini player is the zoom transition's source for Now Playing.
-    @Namespace private var nowPlayingZoom
-    /// Debug switch: the system zoom transition (how Apple Music presents Now Playing) vs the hand-built card.
-    @AppStorage(NowPlayingPresentation.nativeKey) private var nativePresentation = true
 
     private func path(_ id: TabID) -> Binding<[Route]> {
         Binding(get: { paths[id] ?? [] }, set: { paths[id] = $0 })
@@ -49,18 +45,15 @@ struct MainTabView: View {
             // Now Playing. Apple Music presents it with UIKit's zoom transition from the tab bar accessory (traced:
             // its PalettePresentationAnimationController runs on _UIZoomTransitionController, and the accessory's
             // Liquid Glass is matched to the card as it lands), so the native version is the same mechanism.
-            .overlay { if !nativePresentation { PlayerCardHost() } }
             // Presented from UIKit: Music's open animator, the system zoom transition for the close.
-            .onChange(of: player.showNowPlaying) { _, show in
-                if nativePresentation { NowPlayingPresenter.shared.update(show: show) }
-            }
+            .onChange(of: player.showNowPlaying) { _, show in NowPlayingPresenter.shared.update(show: show) }
             // The mini player is always there: bring back whatever was playing last (paused).
             .task {
                 player.restoreLastSession()
                 restoreScene()
                 // Have Now Playing built and laid out before it's first opened.
                 try? await Task.sleep(for: .seconds(1))
-                if nativePresentation { NowPlayingPresenter.shared.prepare() }
+                NowPlayingPresenter.shared.prepare()
             }
             .onChange(of: paths) { saveScene() }
             .onChange(of: tab) { saveScene() }
@@ -133,7 +126,7 @@ struct MainTabView: View {
         .tabViewStyle(.sidebarAdaptable)
         .tabBarMinimizeBehavior(.onScrollDown)
         .tabViewBottomAccessory(isEnabled: player.hasItem) {
-            MiniPlayer(zoomNamespace: nativePresentation ? nowPlayingZoom : nil)
+            MiniPlayer()
         }
         .alert("Bookmark", isPresented: Binding(
             get: { bookmarks.actionError != nil },
@@ -155,11 +148,6 @@ struct MainTabView: View {
 /// Compact player shown in the tab bar accessory; tap to open Now Playing.
 struct MiniPlayer: View {
     @Environment(AudioPlayer.self) private var player
-    /// The copy drawn on the Now Playing card as it lands; the real one measures itself and hides meanwhile.
-    var isCardFace = false
-    /// When set, the bar is the source of Now Playing's zoom transition.
-    var zoomNamespace: Namespace.ID? = nil
-    @State private var card = PlayerCardModel.shared
     @Environment(\.tabViewBottomAccessoryPlacement) private var placement
 
     /// The bar's own width: wide (the iPhone Duo unfolded in landscape) gets Apple Music's full control bar.
@@ -176,18 +164,12 @@ struct MiniPlayer: View {
         .onTapGesture { player.showNowPlaying = true }
         // Swiping up opens Now Playing as soon as the swipe is clearly upward: the card animates open on its own,
         // like a tap, rather than following the finger.
-        .gesture(isCardFace ? nil : DragGesture(minimumDistance: 8, coordinateSpace: .global)
+        .gesture(DragGesture(minimumDistance: 8, coordinateSpace: .global)
             .onChanged { v in
                 let up = -v.translation.height
                 if up > 12, up > abs(v.translation.width), !player.showNowPlaying { player.showNowPlaying = true }
             })
-        .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { frame in
-            if !isCardFace { card.miniFrame = frame }
-            width = frame.width
-        }
-        // The card stands in for the mini player while it's open or animating.
-        .opacity(!isCardFace && card.visible ? 0 : 1)
-        .modifier(ZoomSource(namespace: zoomNamespace))
+        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
     }
 
     /// Artwork, title and album/collection.
@@ -261,18 +243,6 @@ struct MiniPlayer: View {
     }
 }
 
-/// Marks the mini player as Now Playing's zoom transition source (native presentation only).
-private struct ZoomSource: ViewModifier {
-    let namespace: Namespace.ID?
-    func body(content: Content) -> some View {
-        if let namespace {
-            content.matchedTransitionSource(id: NowPlayingPresentation.sourceID, in: namespace)
-        } else {
-            content
-        }
-    }
-}
-
 /// Now Playing as a full-screen presentation (the system zoom transition draws the card, its springs and the landing
 /// in the bar). Laid out edge to edge with the screen's insets passed in, as on the card.
 ///
@@ -281,9 +251,6 @@ private struct ZoomSource: ViewModifier {
 /// Music does this by moving the card's container (`UIDropShadowView`) during the drag and starting the landing from
 /// wherever it was released (traced 2026-11-12); this does the same with the presentation's container.
 struct NowPlayingPresentation: View {
-    static let nativeKey = "nativeNowPlayingTransition"
-    static let sourceID = "miniPlayer"
-
     @Environment(AudioPlayer.self) private var player
     @State private var card = PresentedCard()
     /// Touch slop before the card starts to follow (UIKit's).
@@ -304,6 +271,8 @@ struct NowPlayingPresentation: View {
             // Edge to edge behind the padded player (there's no system safe area here for it to extend into).
             .background { NowPlayingBackdrop() }
             .ignoresSafeArea()
+            // Kept built between opens: idle (no scrolling titles, no scrubber updates) while it's closed.
+            .environment(\.isOnScreen, NowPlayingPresenter.shared.isPresented)
             .background(PresentedControllerReader { card.controller = $0 })
         // The system's drag-to-dismiss would shrink the card; the drag below replaces it.
         .interactiveDismissDisabled()

@@ -23,20 +23,8 @@ actor AuthService {
     static let shared = AuthService()
     private static let keychainKey = "tokens"
 
-    private(set) var tokens: Tokens? = Keychain.getCodable(Tokens.self, for: AuthService.keychainKey) ?? AuthService.debugImportedTokens()
+    private(set) var tokens: Tokens? = Keychain.getCodable(Tokens.self, for: AuthService.keychainKey)
 
-    /// Simulator-only: reuse a session copied into Documents, so switching simulators doesn't need a new sign-in.
-    private static func debugImportedTokens() -> Tokens? {
-        #if DEBUG && targetEnvironment(simulator)
-        let url = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("debug-tokens.json")
-        guard let data = try? Data(contentsOf: url), let t = try? JSONDecoder().decode(Tokens.self, from: data) else { return nil }
-        Keychain.setCodable(t, for: keychainKey)
-        return t
-        #else
-        return nil
-        #endif
-    }
     private var refreshTask: Task<Tokens, Error>?
     private let tokenSession = URLSession(configuration: .ephemeral)
 
@@ -94,9 +82,6 @@ actor AuthService {
     private func store(_ new: Tokens?) {
         tokens = new
         Keychain.setCodable(new, for: Self.keychainKey)
-        #if DEBUG && targetEnvironment(simulator)
-        DebugTokenDump.write(new)
-        #endif
     }
 
     private func postForm(_ fields: [String: String], url: URL = OAuthConfig.tokenURL) async throws -> [String: Any] {
@@ -115,17 +100,3 @@ actor AuthService {
     }
 }
 
-#if DEBUG && targetEnvironment(simulator)
-/// Simulator-only: writes tokens to the app container so the API can be probed from a shell during development.
-enum DebugTokenDump {
-    static func write(_ tokens: Tokens?) {
-        let url = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("debug-tokens.json")
-        if let tokens, let data = try? JSONEncoder().encode(tokens) {
-            try? data.write(to: url)
-        } else {
-            try? FileManager.default.removeItem(at: url)
-        }
-    }
-}
-#endif

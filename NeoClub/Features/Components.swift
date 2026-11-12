@@ -302,7 +302,7 @@ extension View {
 /// that fits just sits still.
 private struct IsOnScreenKey: EnvironmentKey { static let defaultValue = true }
 extension EnvironmentValues {
-    /// False while a view is kept mounted but hidden (the Now Playing card behind the mini player), so it can skip
+    /// False while a view is kept built but hidden (Now Playing while it's closed), so it can skip
     /// animations and per-second updates.
     var isOnScreen: Bool {
         get { self[IsOnScreenKey.self] }
@@ -317,8 +317,6 @@ struct MarqueeText: View {
     var gap: CGFloat = 40
     /// Scrolling speed, points per second.
     var speed: CGFloat = 30
-    /// Changing this starts over from the beginning (e.g. each time Now Playing opens).
-    var restartKey: Bool = false
     /// Seconds at rest before each pass.
     var pause: Double = 3
 
@@ -361,7 +359,6 @@ struct MarqueeText: View {
                     Color.black
                 }
             }
-            .onChange(of: restartKey) { start = Date() }
             .onChange(of: text) { start = Date() }
             .accessibilityLabel(text)
     }
