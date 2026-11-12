@@ -56,7 +56,10 @@ struct MainTabView: View {
         .task {
             let args = ProcessInfo.processInfo.arguments
             if args.contains("-debugPlayTest"), let test = try? await AIOService.episode(Self.testEpisodeID) {
-                player.play(test)
+                // Queue the rest of its album so Up Next has a full list to look at.
+                let album = test.inAlbum ?? []
+                let after = album.firstIndex { $0.id == test.id }.map { Array(album.dropFirst($0 + 1)) } ?? []
+                player.play(test, queue: after)
             }
             // `-debugTab browse|library|search` opens that tab on launch.
             if let i = args.firstIndex(of: "-debugTab"), i + 1 < args.count {

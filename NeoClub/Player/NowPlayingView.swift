@@ -558,6 +558,7 @@ private struct InfoPanel: View {
             }
         }
         .scrollIndicators(.hidden)
+        .bottomFade()
     }
 
     private func fact(_ label: String, _ value: String) -> some View {
@@ -608,6 +609,7 @@ private struct QueuePanel: View {
             }
         }
         .scrollIndicators(.hidden)
+        .bottomFade()
     }
 
     private func header(_ title: String, subtitle: String?) -> some View {
@@ -673,6 +675,23 @@ private extension View {
         } else {
             self
         }
+    }
+}
+
+extension View {
+    /// Apple Music's Up Next edge: the list fades out over its last 44 pt as it runs into the scrubber, with room
+    /// at the end so the last row can scroll fully clear of the fade. (The system soft scroll edge only draws
+    /// under bars, and there's no bar here.)
+    func bottomFade(_ height: CGFloat = 44) -> some View {
+        self
+            .contentMargins(.bottom, height, for: .scrollContent)
+            .mask {
+                VStack(spacing: 0) {
+                    Color.black
+                    LinearGradient(colors: [.black, .black.opacity(0)], startPoint: .top, endPoint: .bottom)
+                        .frame(height: height)
+                }
+            }
     }
 }
 
