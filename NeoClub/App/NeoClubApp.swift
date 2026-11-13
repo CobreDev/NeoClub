@@ -62,6 +62,11 @@ final class AppModel {
     private static let profileKey = "selectedViewerID"
 
     func bootstrap() async {
+        #if SCREENSHOT_UI_ONLY
+        AudioPlayer.shared.loadPlaceholder()   // `-DSCREENSHOT_UI_ONLY`: no account at all (see docs/tooling.md)
+        phase = .ready
+        return
+        #else
         guard await AuthService.shared.isSignedIn else { phase = .signedOut; return }
         // Open straight into the last profile from the saved list (no spinner while /viewer loads, and it works
         // offline); the list is refreshed behind it.
@@ -73,6 +78,7 @@ final class AppModel {
             }
         }
         await loadProfiles()
+        #endif
     }
 
     /// Activates the last profile if it's in `profiles` and needs no PIN (or its PIN is remembered).

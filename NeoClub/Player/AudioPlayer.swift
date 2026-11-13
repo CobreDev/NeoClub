@@ -151,6 +151,23 @@ final class AudioPlayer {
         }
     }
 
+    #if SCREENSHOT_UI_ONLY
+    /// No-account placeholder for VMs without a login (see docs/tooling.md): Whit's Flop in the mini player with a few
+    /// queued episodes, nothing loaded or playable.
+    func loadPlaceholder() {
+        func stub(_ n: Int, _ title: String) -> Episode? {
+            let json: [String: Any] = ["id": "placeholder-\(n)", "name": title, "album_name": "#01: The Adventure Begins",
+                                       "episode_number": String(format: "%03d", n), "media_length": 1_301_240,
+                                       "thumbnail_large": "https://d23sy43gbewnpt.cloudfront.net/public/images/content/1_-_whits_flop.png"]
+            return (try? JSONSerialization.data(withJSONObject: json)).flatMap { try? JSONDecoder().decode(Episode.self, from: $0) }
+        }
+        guard let first = stub(1, "#001: Whit's Flop") else { return }
+        episode = first
+        duration = 1301.24
+        queue = (2...9).compactMap { stub($0, "#00\($0): Placeholder Episode \($0)") }
+    }
+    #endif
+
     private var pendingRestore: (episode: Episode, groupingID: String?)?
     private var restoreTask: Task<Void, Never>?
 
