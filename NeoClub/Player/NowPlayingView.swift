@@ -195,7 +195,7 @@ struct NowPlayingView: View {
                     Spacer(minLength: 0)
                     bigArtwork.frame(width: art, height: art)
                     titleRow().padding(.top, 23)
-                    ScrubberBar().padding(.top, 12)
+                    ScrubberBar().padding(.top, 9.6)
                     transport(narrow: false).padding(.top, 3)
                     VolumeBar().padding(.top, 22)
                 }
