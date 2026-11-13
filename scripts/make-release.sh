@@ -1,7 +1,10 @@
 #!/bin/zsh
 # Builds a Release IPA into dist/ for your existing AltStore source.
 #
-#   scripts/make-release.sh
+#   scripts/make-release.sh               a new build number
+#   scripts/make-release.sh --same-build  rebuild today's latest build number (e.g. after a fix, when the number
+#                                          shouldn't change): the tag moves to the new commit, and the old one is kept
+#                                          as build-<number>-was-<old hash>
 #
 # The build number is the date, YYMMDD (261113 for 13 Nov 2026), with .2, .3 … for further builds the same day, so it
 # always increases and reads as a date. Each release is tagged `build-<number>` on the commit it was built from
@@ -22,8 +25,13 @@ fi
 
 COMMIT=$(git rev-parse --short=7 HEAD)
 DAY=$(date +%y%m%d)
-SAME_DAY=$(git tag -l "build-$DAY" "build-$DAY.*" | wc -l | tr -d ' ')
-if [[ $SAME_DAY -eq 0 ]]; then BUILD=$DAY; else BUILD="$DAY.$((SAME_DAY + 1))"; fi
+SAME_DAY=$(git tag -l "build-$DAY" "build-$DAY.[0-9]*" | wc -l | tr -d ' ')
+if [[ "${1:-}" == "--same-build" ]]; then
+    if [[ $SAME_DAY -eq 0 ]]; then echo "No build has been made today yet." >&2; exit 1; fi
+    if [[ $SAME_DAY -eq 1 ]]; then BUILD=$DAY; else BUILD="$DAY.$SAME_DAY"; fi
+    OLD=$(git rev-parse --short=7 "build-$BUILD^{commit}")
+    if [[ "$OLD" == "$COMMIT" ]]; then echo "build-$BUILD is already this commit." >&2; exit 1; fi
+elif [[ $SAME_DAY -eq 0 ]]; then BUILD=$DAY; else BUILD="$DAY.$((SAME_DAY + 1))"; fi
 
 xcodebuild -project NeoClub.xcodeproj -scheme NeoClub -configuration Release -destination 'generic/platform=iOS' \
     -derivedDataPath build/release -allowProvisioningUpdates \
@@ -45,7 +53,8 @@ IPA="NeoClub-$VERSION-$BUILD.ipa"
 rm -f "$DIST/$IPA"
 (cd "$STAGE" && /usr/bin/zip -qry "../../$DIST/$IPA" Payload)
 
-git tag "build-$BUILD" HEAD
+if [[ -n "${OLD:-}" ]]; then git tag "build-$BUILD-was-$OLD" "build-$BUILD^{commit}"; git tag -f "build-$BUILD" HEAD >/dev/null
+else git tag "build-$BUILD" HEAD; fi
 
 SIZE=$(stat -f %z "$DIST/$IPA")
 DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
