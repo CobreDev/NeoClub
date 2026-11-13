@@ -154,7 +154,9 @@ final class AudioPlayer {
     #if SCREENSHOT_UI_ONLY
     /// No-account placeholder for VMs without a login (see docs/tooling.md): Whit's Flop in the mini player with a few
     /// queued episodes, nothing loaded or playable.
+    private var uiOnly = false
     func loadPlaceholder() {
+        uiOnly = true
         func stub(_ n: Int, _ title: String) -> Episode? {
             let json: [String: Any] = ["id": "placeholder-\(n)", "name": title, "album_name": "#01: The Adventure Begins",
                                        "episode_number": String(format: "%03d", n), "media_length": 1_301_240,
@@ -302,7 +304,12 @@ final class AudioPlayer {
         if i < addedCount { addedCount -= 1 }
     }
 
-    func togglePlayPause() { isPlaying ? pause() : resume() }
+    func togglePlayPause() {
+        #if SCREENSHOT_UI_ONLY
+        if uiOnly { isPlaying.toggle(); return }   // the placeholder has nothing to play: just flip the state for layout checks
+        #endif
+        isPlaying ? pause() : resume()
+    }
 
     func resume() {
         guard episode != nil else { return }
@@ -506,6 +513,9 @@ final class AudioPlayer {
 
     private func tick(_ time: CMTime) {
         guard episode != nil else { return }
+        #if SCREENSHOT_UI_ONLY
+        if uiOnly { return }
+        #endif
         // Only set what changed: every set of an observed property redraws everything that reads it.
         if time.isNumeric, time.seconds != position { position = time.seconds }
         if let d = player.currentItem?.duration, d.isNumeric, d.seconds > 0, d.seconds != duration { duration = d.seconds }
