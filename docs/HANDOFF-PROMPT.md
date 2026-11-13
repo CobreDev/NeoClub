@@ -14,4 +14,4 @@ When something should match Music:
 - Don't eyeball it or hand-build an imitation.
 - The VM can't settle vertical positions (its safe-area insets differ from the phone's); use my device screenshots for those.
 
-Ask before any write to my account, and don't play or seek any episode other than #001 Whit's Flop. Don't push. Commit when a piece of work is finished.
+Ask before any write to my account, and don't play or seek any episode other than #001 Whit's Flop. Commit when a piece of work is finished. The private repo is CobreDev/NeoClub (`origin`); push only when I ask.

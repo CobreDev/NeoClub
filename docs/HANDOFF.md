@@ -1,6 +1,6 @@
 # NeoClub handoff
 
-Last updated 2026-11-13. `main` is the source of truth (`git log`). Releases are tagged `build-<number>` on the commit they were built from; the debug tooling that was removed before release is kept at the tag `debug-harness` (see "Debug tools" below). Nothing is pushed: tags and commits are local.
+Last updated 2026-11-13. `main` is the source of truth (`git log`). Releases are tagged `build-<number>` on the commit they were built from; the debug tooling that was removed before release is kept at the tag `debug-harness` (see "Debug tools" below). The repo is private at https://github.com/CobreDev/NeoClub (`origin`); `main` and the tags were pushed on 2026-11-13 at the owner's request. Don't push again unless asked.
 
 ## Goal
 
@@ -43,7 +43,7 @@ Copy the mechanism Music actually uses (often a private UIKit setting) rather th
 3. **Native components.** Use system bars, blurs, menus, sheets and glass. No hand-drawn imitations.
 4. **Duo inner screen.** Full-width single-page browsing. No list/detail two-pane split.
 5. **vphone.** Use it as designed. Don't edit the VM's `config.plist` screen config. Change the fold with `display.posture`. Don't change host security settings, SIP or boot-args.
-6. Commit only when asked or when finishing agreed work. Don't push. `dist/` is gitignored.
+6. Commit only when asked or when finishing agreed work. Push only when asked (the private repo `CobreDev/NeoClub` exists as `origin`). `dist/` is gitignored.
 
 ## Architecture map
 
