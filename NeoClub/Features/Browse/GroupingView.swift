@@ -8,6 +8,8 @@ struct GroupingView: View {
     @State private var grouping: Grouping?
     @State private var error: String?
     @State private var expanded = false
+    /// Air dates read from an episode's detail: an album's own episode list carries none, but an episode's `in_album` does.
+    @State private var airDates: [Date] = []
 
     private var shown: Grouping? { grouping ?? preview }
     private var episodes: [Episode] { shown?.contentList ?? [] }
@@ -120,8 +122,10 @@ struct GroupingView: View {
 
     /// "Released November 5, 2005", or the first and last dates when the episodes came out over time (a series, a year).
     private var releaseLine: String? {
-        let dates = episodes.compactMap(\.releaseDate)
-        guard let first = dates.min(), let last = dates.max() else { return nil }
+        let dates = episodes.compactMap(\.releaseDate) + airDates
+        guard let first = dates.min(), let last = dates.max() else {
+            return shown?.copyrightYear.map { "Released \($0)" }
+        }
         let a = Episode.releaseText(first), b = Episode.releaseText(last)
         return a == b ? "Released \(a)" : "Released \(a) – \(b)"
     }
@@ -158,8 +162,16 @@ struct GroupingView: View {
         do {
             grouping = try await AIOService.grouping(groupingID)
             error = nil
+            await loadAirDates()
         } catch {
             self.error = error.localizedDescription
         }
+    }
+
+    /// The album's episodes with their air dates, from one episode's detail (the list the album page returns has none).
+    private func loadAirDates() async {
+        guard airDates.isEmpty, !episodes.contains(where: { $0.releaseDate != nil }), let first = playable.first,
+              let detail = try? await AIOService.episode(first.id, groupingID: groupingID) else { return }
+        airDates = ([detail] + (detail.inAlbum ?? [])).compactMap(\.releaseDate)
     }
 }

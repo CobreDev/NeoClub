@@ -242,6 +242,7 @@ struct Grouping: Decodable, Identifiable, Hashable {
     let imageURL: String?
     let description: String?
     let fullDescription: String?
+    let copyrightYear: String?
     let contentList: [Episode]
 
     var id: String { groupingID ?? "\(type ?? "")-\(name ?? "")" }
@@ -250,7 +251,7 @@ struct Grouping: Decodable, Identifiable, Hashable {
 
     enum CodingKeys: String, CodingKey {
         case groupingID = "id", name, type, description, contentList, imageURL
-        case albumNumber = "album_number", fullDescription = "full_description"
+        case albumNumber = "album_number", fullDescription = "full_description", copyrightYear = "album_copyright_year"
     }
 
     init(from decoder: Decoder) throws {
@@ -260,6 +261,7 @@ struct Grouping: Decodable, Identifiable, Hashable {
         albumNumber = c.string(.albumNumber) ?? c.lenientInt(.albumNumber).map(String.init)
         imageURL = c.string(.imageURL)
         description = c.string(.description); fullDescription = c.string(.fullDescription)
+        copyrightYear = c.string(.copyrightYear) ?? c.lenientInt(.copyrightYear).map(String.init)
         contentList = (try? c.decodeIfPresent([Episode].self, forKey: .contentList)) ?? []
     }
 }
