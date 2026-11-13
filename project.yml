@@ -10,7 +10,10 @@ settings:
     CODE_SIGN_STYLE: Automatic
     SWIFT_VERSION: "5.0"
     MARKETING_VERSION: "1.0"
-    CURRENT_PROJECT_VERSION: "1"
+    # Dev builds are build 0; scripts/make-release.sh sets the build number (YYMMDD, then .2, .3 … for more the same
+    # day) and the commit it was built from.
+    CURRENT_PROJECT_VERSION: "0"
+    NEOCLUB_COMMIT: dev
 targets:
   NeoClub:
     type: application
@@ -33,6 +36,7 @@ targets:
       path: NeoClub/Info.plist
       properties:
         UIBackgroundModes: [audio]
+        NeoClubCommit: $(NEOCLUB_COMMIT)
         UIFileSharingEnabled: true
         LSSupportsOpeningDocumentsInPlace: true
         UIAppFonts: [JacobyICGBlack.ttf, UniversRegular.ttf, UniversBold.ttf]

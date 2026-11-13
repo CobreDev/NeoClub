@@ -93,7 +93,6 @@ struct SignInView: View {
     private func finish(code: String, verifier: String) async {
         isExchanging = true
         defer { isExchanging = false }
-        SignInLog.write("exchange: verifier hashes to \(PKCE.challenge(for: verifier).prefix(8))")
         do {
             try await AuthService.shared.exchange(code: code, verifier: verifier)
             await app.didSignIn()
@@ -118,7 +117,6 @@ struct OAuthWebView: UIViewRepresentable {
         let web = WKWebView(frame: .zero, configuration: config)
         web.navigationDelegate = context.coordinator
         let pkce = context.coordinator.pkce
-        SignInLog.write("authorize: loading challenge \(pkce.challenge.prefix(8))")
         web.load(URLRequest(url: pkce.authorizeURL(), timeoutInterval: 20))
         context.coordinator.armTimeout()
         return web
@@ -150,7 +148,6 @@ struct OAuthWebView: UIViewRepresentable {
             timeout?.cancel()
             let item = DispatchWorkItem { [weak self] in
                 guard let self, !self.handled else { return }
-                SignInLog.write("timeout")
                 self.onFailure("The sign-in page took too long to respond.")
             }
             timeout = item
@@ -158,7 +155,6 @@ struct OAuthWebView: UIViewRepresentable {
         }
 
         private func fail(_ error: Error, _ kind: String) {
-            SignInLog.write("\(kind): \(error.localizedDescription)")
             // -999 is our own cancel of the callback redirect; 102 is "frame load interrupted".
             let ns = error as NSError
             guard !handled, ns.code != NSURLErrorCancelled, ns.code != 102 else { return }
@@ -175,13 +171,11 @@ struct OAuthWebView: UIViewRepresentable {
         }
 
         func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
-            SignInLog.write("finished: \(SignInLog.describe(webView.url))")
             timeout?.cancel()
         }
 
         func webView(_ webView: WKWebView, decidePolicyFor action: WKNavigationAction,
                      decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
-            SignInLog.write("navigate: \(SignInLog.describe(action.request.url)) mainFrame=\(action.targetFrame?.isMainFrame ?? false)")
             guard let url = action.request.url,
                   url.absoluteString.hasPrefix(OAuthConfig.redirectURI) else {
                 decisionHandler(.allow)
@@ -197,28 +191,5 @@ struct OAuthWebView: UIViewRepresentable {
                 onCode(code, pkce.verifier)
             }
         }
-    }
-}
-
-/// Debug-only sign-in trace. Logs host, path, and query parameter *names* only — never codes or tokens.
-enum SignInLog {
-    static func describe(_ url: URL?) -> String {
-        guard let url, let c = URLComponents(url: url, resolvingAgainstBaseURL: false) else { return "nil" }
-        let names = (c.queryItems ?? []).map(\.name).joined(separator: ",")
-        return "\(c.host ?? "")\(c.path) [\(names)]"
-    }
-
-    static func write(_ line: String) {
-        #if DEBUG
-        let dir = FileManager.default.urls(for: .libraryDirectory, in: .userDomainMask)[0].appendingPathComponent("Logs")
-        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        let url = dir.appendingPathComponent("signin-log.txt")
-        let entry = "\(Date().formatted(date: .omitted, time: .standard)) \(line)\n"
-        if let h = try? FileHandle(forWritingTo: url) {
-            h.seekToEndOfFile(); h.write(Data(entry.utf8)); try? h.close()
-        } else {
-            try? entry.write(to: url, atomically: true, encoding: .utf8)
-        }
-        #endif
     }
 }

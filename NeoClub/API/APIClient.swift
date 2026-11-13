@@ -78,7 +78,6 @@ final class APIClient: @unchecked Sendable {
             let req = makeRequest(method, path, query: query, body: body, token: tokens!.accessToken)
             let (data, response) = try await session.data(for: req)
             let status = (response as? HTTPURLResponse)?.statusCode ?? 0
-            DebugAPILog.record(req, status: status, data: data)
             if status == 401 && attempt == 0 {
                 tokens = try await AuthService.shared.refresh()
                 continue
@@ -133,21 +132,5 @@ enum ResponseCache {
     static func clear() {
         try? FileManager.default.removeItem(at: dir)
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-    }
-}
-
-/// Debug builds keep the last few raw responses on disk for inspection.
-enum DebugAPILog {
-    static func record(_ req: URLRequest, status: Int, data: Data) {
-        #if DEBUG
-        // Library/Logs, not Documents: Documents is visible in the Files app.
-        let dir = FileManager.default.urls(for: .libraryDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("Logs/api-log", isDirectory: true)
-        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        let name = "\(req.httpMethod ?? "GET")\(req.url?.path ?? "")"
-            .replacingOccurrences(of: "/", with: "_")
-        let entry = "\(req.httpMethod ?? "") \(req.url?.absoluteString ?? "") -> \(status)\n" + String(decoding: data, as: UTF8.self)
-        try? entry.write(to: dir.appendingPathComponent(name + ".txt"), atomically: true, encoding: .utf8)
-        #endif
     }
 }

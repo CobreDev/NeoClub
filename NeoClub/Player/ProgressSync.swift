@@ -61,11 +61,7 @@ final class ProgressSync {
         lastSentMs = positionMs
         if complete { serverWasComplete = true }
         Task {
-            do {
-                try await AIOService.saveProgress(episodeID: episodeID, status: status, positionMs: positionMs)
-            } catch {
-                SignInLog.write("progress sync failed: \(error.localizedDescription)")
-            }
+            try? await AIOService.saveProgress(episodeID: episodeID, status: status, positionMs: positionMs)
         }
     }
 }

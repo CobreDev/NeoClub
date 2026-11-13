@@ -103,9 +103,9 @@ final class DownloadStore {
         save()
     }
 
-    // MARK: Copies in Files (debug option)
+    // MARK: Copies in Files
 
-    /// Debug option: also keep each downloaded episode in the app's folder in the Files app, named by its title.
+    /// Option: also keep each downloaded episode in the app's folder in the Files app, named by its title.
     static let exportKey = "exportDownloadsToFiles"
     static var exportsToFiles: Bool { UserDefaults.standard.bool(forKey: exportKey) }
 
@@ -201,12 +201,10 @@ final class DownloadStore {
                 task.taskDescription = episode.id
                 task.resume()
             } else {
-                SignInLog.write("background downloads unavailable; downloading in the app")
                 foreground[episode.id] = Task { await downloadInApp(episode.id, request: request) }
             }
         } catch {
             lastError = error.localizedDescription
-            SignInLog.write("download failed: \(error.localizedDescription)")
             finish(episode.id)
         }
     }
@@ -226,14 +224,12 @@ final class DownloadStore {
         save()
         if Self.exportsToFiles, let item = items.first { export(item) }
         try? FileManager.default.removeItem(at: pending)
-        SignInLog.write("download saved: \(bytes) bytes")
         finish(id)
     }
 
     fileprivate func failed(id: String, message: String?) {
         if let message {
             lastError = message
-            SignInLog.write("download failed: \(message)")
         }
         try? FileManager.default.removeItem(at: pendingDirectory.appendingPathComponent("\(id).json"))
         finish(id)
@@ -270,7 +266,6 @@ final class DownloadStore {
             let status = (response as? HTTPURLResponse)?.statusCode ?? 0
             guard status == 200 else {
                 try? FileManager.default.removeItem(at: temp)
-                SignInLog.write("download refused: HTTP \(status)")
                 failed(id: id, message: "The server refused the download (HTTP \(status)).")
                 return
             }
@@ -351,7 +346,6 @@ final class DownloadStore {
             guard let id = downloadTask.taskDescription else { return }
             let status = (downloadTask.response as? HTTPURLResponse)?.statusCode ?? 0
             guard status == 200 else {
-                SignInLog.write("download refused: HTTP \(status)")
                 Task { @MainActor [weak store] in store?.failed(id: id, message: "The server refused the download (HTTP \(status)).") }
                 return
             }

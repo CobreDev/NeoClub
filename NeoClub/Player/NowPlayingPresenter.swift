@@ -113,7 +113,6 @@ final class NowPlayingPresenter: NSObject {
 
     /// Shows or hides Now Playing to match `show`.
     func update(show: Bool) {
-        trace("update(show: \(show)) presented=\(presented != nil) dismissing=\(dismissing != nil)")
         wantsShow = show
         if show { present() } else { dismiss() }
     }
@@ -140,25 +139,14 @@ final class NowPlayingPresenter: NSObject {
         return nil
     }
 
-    /// Debug-only state log (Library/Logs/signin-log.txt).
-    fileprivate func trace(_ line: String) {
-        #if DEBUG
-        SignInLog.write("NP " + line)
-        #endif
-    }
-
     private func present() {
         // Reopened while the last close is still landing: presenting the same controller then makes UIKit throw
         // (it ran the deferred present inside the close's completion and crashed). Open once it has finished.
         // A close whose controller is no longer on screen has finished even if its completion never ran.
         if let stuck = dismissing, stuck.view.window == nil, stuck.presentingViewController == nil { closeFinished() }
-        guard presented == nil, dismissing == nil, let root else {
-            if presented == nil { trace("present blocked: dismissing=\(dismissing != nil) root=\(self.root != nil)") }
-            return
-        }
+        guard presented == nil, dismissing == nil, let root else { return }
         let vc = controller()
-        guard vc.presentingViewController == nil else { trace("present blocked: still attached"); return }
-        trace("present")
+        guard vc.presentingViewController == nil else { return }
         vc.preferredTransition = nil
         vc.modalPresentationStyle = .formSheet
         configureSheet(vc)
@@ -194,7 +182,6 @@ final class NowPlayingPresenter: NSObject {
         vc.isModalInPresentation = false
         guard presented === vc else { return }
         if cancelled || vc.presentingViewController == nil {
-            trace("open reversed")
             resetClosedState()
         } else {
             finishOpenArtwork()
@@ -219,7 +206,6 @@ final class NowPlayingPresenter: NSObject {
     /// Marks a presentation that is no longer attached (and isn't mid-transition) as closed.
     func healIfStale() {
         guard let vc = presented, !vc.isBeingPresented, vc.presentingViewController == nil || vc.view.window == nil else { return }
-        trace("healed a stale presentation")
         resetClosedState()
     }
 
@@ -268,8 +254,7 @@ final class NowPlayingPresenter: NSObject {
     }
 
     private func dismiss() {
-        guard let vc = presented else { trace("dismiss: nothing presented"); return }
-        trace("dismiss (tap)")
+        guard let vc = presented else { return }
         beginClose(vc)
         // Before the dismissal starts, so the stand-ins are in the card when UIKit resizes it (they resize with it).
         runCloseAnimations(vc)
@@ -298,7 +283,6 @@ final class NowPlayingPresenter: NSObject {
     /// Runs when a close is over (idempotent: the tap close, the sheet's completion and its delegate all call it).
     private func closeFinished() {
         guard dismissing != nil || flyingArtwork != nil else { return }
-        trace("closeFinished wantsShow=\(wantsShow)")
         dismissing?.view.alpha = 1
         dismissing = nil
         closeAnimationsStarted = false
@@ -315,7 +299,6 @@ final class NowPlayingPresenter: NSObject {
 
     /// The finger-driven close was cancelled (let go short of the threshold): the sheet springs back, Now Playing is open.
     fileprivate func closeCancelled(_ vc: UIHostingController<AnyView>) {
-        trace("closeCancelled")
         presented = vc
         isPresented = true
         dismissing = nil
@@ -328,7 +311,6 @@ final class NowPlayingPresenter: NSObject {
 
     /// The finger-driven close was let go past the threshold: it's closing now.
     fileprivate func dragCloseCommitted(_ vc: UIHostingController<AnyView>) {
-        trace("dragCloseCommitted")
         // Now, not when it ends, so a tap on the bar while the card lands is a request to reopen.
         AudioPlayer.shared.showNowPlaying = false
         runCloseAnimations(vc)
@@ -408,8 +390,7 @@ final class NowPlayingPresenter: NSObject {
 extension NowPlayingPresenter: UISheetPresentationControllerDelegate {
     /// The sheet's drag started a close (the finger may still cancel it).
     func presentationControllerWillDismiss(_ presentationController: UIPresentationController) {
-        guard let vc = presented, presentationController.presentedViewController === vc else { trace("willDismiss ignored"); return }
-        trace("willDismiss")
+        guard let vc = presented, presentationController.presentedViewController === vc else { return }
         beginClose(vc)
         guard let coordinator = vc.transitionCoordinator else { dragCloseCommitted(vc); return }
         // Whether it completes or is cancelled, the transition's own completion settles the state.
@@ -430,7 +411,6 @@ extension NowPlayingPresenter: UISheetPresentationControllerDelegate {
 
     /// A close by dragging finished (a backup for the transition's completion above).
     func presentationControllerDidDismiss(_ presentationController: UIPresentationController) {
-        trace("didDismiss presented=\(presented != nil)")
         // The sheet is gone but the presenter never heard that it was closing (no willDismiss): finish that here, or
         // the player stays marked open and tapping the bar does nothing.
         if let vc = presented, presentationController.presentedViewController === vc {

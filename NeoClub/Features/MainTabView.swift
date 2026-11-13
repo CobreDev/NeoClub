@@ -6,38 +6,20 @@ struct MainTabView: View {
     @Environment(DownloadStore.self) private var downloads
 
     enum TabID: String, Hashable { case home, browse, library, search }
-    /// #001 Whit's Flop: the only episode to play while testing (progress syncs to the account).
-    static let testEpisodeID = "a354W0000046TjUQAU"
     @Environment(NetworkMonitor.self) private var network
     @Environment(BookmarkStore.self) private var bookmarks
-    @State private var tab: TabID = NetworkMonitor.shared.isOnline ? .home : .library
-    @State private var paths: [TabID: [Route]] = [:]
-    /// The app's place, kept with the window so it survives the window being recreated (unfolding the iPhone Duo
-    /// moves the app to the inner screen).
-    @SceneStorage("sceneState") private var storedScene: Data?
-    @State private var restored = false
+    @State private var tab: TabID = SceneMemory.tab ?? (NetworkMonitor.shared.isOnline ? .home : .library)
+    @State private var paths: [TabID: [Route]] = SceneMemory.paths
+
+    /// The app's place lives as long as the process, not longer: it survives the window being recreated (unfolding
+    /// the iPhone Duo moves the app to the inner screen), but a fresh launch always opens on Home.
+    private enum SceneMemory {
+        static var tab: TabID?
+        static var paths: [TabID: [Route]] = [:]
+    }
 
     private func path(_ id: TabID) -> Binding<[Route]> {
         Binding(get: { paths[id] ?? [] }, set: { paths[id] = $0 })
-    }
-
-    private func saveScene() {
-        guard restored else { return }
-        let state = SceneState(tab: tab.rawValue,
-                               paths: Dictionary(uniqueKeysWithValues: paths.map { ($0.key.rawValue, $0.value.compactMap(StoredRoute.init)) }),
-                               nowPlayingOpen: player.showNowPlaying)
-        storedScene = try? JSONEncoder().encode(state)
-    }
-
-    private func restoreScene() {
-        defer { restored = true }
-        guard !restored, let data = storedScene, let state = try? JSONDecoder().decode(SceneState.self, from: data) else { return }
-        if let t = TabID(rawValue: state.tab) { tab = t }
-        for (key, routes) in state.paths {
-            if let id = TabID(rawValue: key) { paths[id] = routes.compactMap(\.route) }
-        }
-        // Now Playing isn't reopened after a relaunch: the app starts on the mini player (`nowPlayingOpen` is
-        // still saved, but only for older builds' sake).
     }
 
     var body: some View {
@@ -50,73 +32,12 @@ struct MainTabView: View {
             // The mini player is always there: bring back whatever was playing last (paused).
             .task {
                 player.restoreLastSession()
-                restoreScene()
                 // Have Now Playing built and laid out before it's first opened.
                 try? await Task.sleep(for: .seconds(1))
                 NowPlayingPresenter.shared.prepare()
             }
-            .onChange(of: paths) { saveScene() }
-            .onChange(of: tab) { saveScene() }
-            .onChange(of: player.showNowPlaying) { saveScene() }
-        #if DEBUG
-        // Developer convenience. Progress syncs, so test playback is always Whit's Flop: `-debugPlayTest` plays it.
-        .task {
-            let args = ProcessInfo.processInfo.arguments
-            if args.contains("-debugPlayTest"), let test = try? await AIOService.episode(Self.testEpisodeID) {
-                // Queue the rest of its album so Up Next has a full list to look at.
-                let album = test.inAlbum ?? []
-                let after = album.firstIndex { $0.id == test.id }.map { Array(album.dropFirst($0 + 1)) } ?? []
-                player.play(test, queue: after)
-            }
-            // `-debugTab browse|library|search` opens that tab on launch.
-            if let i = args.firstIndex(of: "-debugTab"), i + 1 < args.count {
-                tab = ["browse": .browse, "library": .library, "search": .search][args[i + 1]] ?? .home
-            }
-            // `-debugCycleNowPlaying <closeAfterSeconds> <count>` opens and closes Now Playing in a loop (tap-style
-            // close through the presenter), for recording the transitions without touch input.
-            if let i = args.firstIndex(of: "-debugCycleNowPlaying") {
-                let hold = i + 1 < args.count ? Double(args[i + 1]) ?? 2.5 : 2.5
-                let count = i + 2 < args.count ? Int(args[i + 2]) ?? 5 : 5
-                try? await Task.sleep(for: .seconds(9))
-                for _ in 0..<count {
-                    player.showNowPlaying = true
-                    try? await Task.sleep(for: .seconds(hold))
-                    player.showNowPlaying = false
-                    try? await Task.sleep(for: .seconds(2.5))
-                }
-            }
-            // `-debugAlbum` opens an album page made of placeholder episodes (no account needed; for testing rows).
-            if args.contains("-debugAlbum") {
-                let eps = (1...8).map { ["id": "placeholder-\($0)", "name": "#00\($0): Placeholder Episode \($0)", "type": "Audio",
-                                          "media_length": 1_301_240] as [String: Any] }
-                let json: [String: Any] = ["id": "placeholder-album", "name": "Placeholder Album", "type": "Album", "contentList": eps,
-                                           "imageURL": "https://d23sy43gbewnpt.cloudfront.net/public/images/content/1_-_whits_flop.png"]
-                if let data = try? JSONSerialization.data(withJSONObject: json),
-                   let g = try? JSONDecoder().decode(Grouping.self, from: data) {
-                    paths[tab, default: []].append(Route.grouping(id: "placeholder-album", preview: g))
-                }
-            }
-            // `-debugEpisode <episodeID>` opens that episode's page.
-            if let i = args.firstIndex(of: "-debugEpisode"), i + 1 < args.count,
-               let ep = try? await AIOService.episode(args[i + 1]) {
-                paths[tab, default: []].append(Route.episode(ep, groupingID: nil))
-            }
-            // `-debugRestoreTestEpisode` puts Whit's Flop back to Complete at its full length on the account (after tests).
-            if args.contains("-debugRestoreTestEpisode") {
-                do {
-                    try await AIOService.saveProgress(episodeID: Self.testEpisodeID, status: "Complete", positionMs: 1_301_240)
-                    SignInLog.write("test episode restored: Complete at 1301240")
-                } catch {
-                    SignInLog.write("test episode restore failed: \(error.localizedDescription)")
-                }
-            }
-            // `-debugDownload <episodeID>` starts a download on launch (testing without UI input).
-            if let i = args.firstIndex(of: "-debugDownload"), i + 1 < args.count,
-               let ep = try? await AIOService.episode(args[i + 1]) {
-                downloads.download(ep)
-            }
-        }
-        #endif
+            .onChange(of: paths) { SceneMemory.paths = paths }
+            .onChange(of: tab) { SceneMemory.tab = tab }
     }
 
     private var tabs: some View {

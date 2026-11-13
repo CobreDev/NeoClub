@@ -1,6 +1,6 @@
 # NeoClub handoff
 
-Last updated 2026-11-12. HEAD is `fd82602` on `main`.
+Last updated 2026-11-13. `main` is the source of truth (`git log`). Releases are tagged `build-<number>` on the commit they were built from; the debug tooling that was removed before release is kept at the tag `debug-harness` (see "Debug tools" below). Nothing is pushed: tags and commits are local.
 
 ## Goal
 
@@ -16,7 +16,8 @@ Copy the mechanism Music actually uses (often a private UIKit setting) rather th
 
 ## Current state
 
-- Version **1.0 (build 1)**, bundle ID `dev.cobre.aioclub`, team `4BN7V65X8J`, iOS 26.2+, XcodeGen (`project.yml`).
+- Version **1.0**, bundle ID `dev.cobre.aioclub`, team `4BN7V65X8J`, iOS 26.2+, XcodeGen (`project.yml`).
+- **Build numbers are dates**: `YYMMDD` (`261113` = 13 Nov 2026), then `261113.2`, `261113.3` for more builds the same day, so they always increase and read as a date. `scripts/make-release.sh` sets them and tags the commit `build-<number>` (`git show build-261113`). The short commit hash is baked into the app too (`NeoClubCommit` in Info.plist) and shown in Account's footer: "AIO Club 1.0 (261113 · 4a02eeb)". Dev builds from Xcode are build `0` / commit `dev`.
 - v1 scope is done:
   - sign-in (OAuth, the official client ID), profiles with PINs
   - Home, Browse, Library, Search, episode and album pages
@@ -25,18 +26,19 @@ Copy the mechanism Music actually uses (often a private UIKit setting) rather th
   - Dynamic Type
   - outer and inner Duo layouts, including laptop posture and split view
 - 13 unit tests in `NeoClubTests` pass.
-- **The latest debug build (fd82602) is on the owner's Duo.** The owner hasn't confirmed the new Now Playing close on the phone yet. That's the open question.
-- `dist/NeoClub-1.0.ipa` was built *before* fd82602. Rebuild it with `scripts/make-release.sh` before publishing.
+- **Now Playing animations are signed off by the owner** (open, tap close, drag close, flick close, reopen), and the layout was matched to the owner's device screenshots of Music on 2026-11-13 (see the layout section).
+- **Release prep (2026-11-13):** all debug code is removed from the app (launch arguments, the NP state log, the API log, the sign-in log, the placeholder UI-only mode, the Debug menu and API Explorer, the 10-second sleep timer). The two switches the Debug menu held that are real settings, *Sync Listening Progress* and *Show Downloads in Files*, are now in Account.
+- **Launch behaviour:** the app opens on Home after a fresh launch. The tab and pages are remembered only for the life of the process (`SceneMemory` in `MainTabView`), so unfolding the Duo (which recreates the window) keeps your place, but quitting and relaunching does not. (It used to restore the last pages from `@SceneStorage`, rebuilding an album from a bare ID, which showed a black rectangle where its header should be.) The mini player still brings back the last episode, paused.
 
 ## Hard rules (owner's instructions)
 
 1. **Account safety.** The real paid AIO account is used. Mirror the official client's requests: headers `X-Experience-Name`, `X-VIEWER-ID`, `X-PIN` and the same OAuth parameters. Keep API probing to a few spaced-out read-only GETs. **Ask before any write**: progress, ratings, profile or PIN, membership. Never type the owner's password or PIN; they sign in themselves.
-2. **Progress safety.** Sync is ON in normal builds.
-   - Test playback only on **#001 Whit's Flop** (`a354W0000046TjUQAU`, Cooper profile).
-   - Restore it with the `-debugRestoreTestEpisode` launch argument: Complete at 1301240.
-   - Never play, seek or mark played any other episode without asking.
-   - Simulator testing without writes: `-syncProgress NO`, or the `-debugUIOnly` placeholder mode.
-   - VM builds signed in to the real account must use `-DFORCE_NO_SYNC`.
+2. **Progress safety.** Sync is ON in normal builds (switch in Account).
+   - Test playback only on **#001 Whit's Flop** (`a354W0000046TjUQAU`, Cooper profile). Use the Cooper profile for everything.
+   - Never play, seek or mark played any other episode, and never overwrite episodes that are in progress or the owner's place in an album, without asking. (Once the app is built, moving progress backwards is fine, but not by testing on real progress.)
+   - Restoring Whit's Flop to Complete at 1301240 used `-debugRestoreTestEpisode`, which is no longer in the app; build the `debug-harness` tag for it (see "Debug tools").
+   - Simulator testing without writes: `-syncProgress NO` still works (it is read from `UserDefaults`, so a launch argument sets it), or build the `debug-harness` tag's placeholder mode.
+   - VM builds signed in to the real account must use `-DFORCE_NO_SYNC` (kept in `ProgressSync`: `isEnabled` is always false under it).
    - Ignore the episodes that were finished locally while sync was off. Never push them.
 3. **Native components.** Use system bars, blurs, menus, sheets and glass. No hand-drawn imitations.
 4. **Duo inner screen.** Full-width single-page browsing. No list/detail two-pane split.
@@ -56,9 +58,10 @@ Copy the mechanism Music actually uses (often a private UIKit setting) rather th
 | Playback, queue, sync | `NeoClub/Player/AudioPlayer.swift` (`addedCount` = Music's "Playing Next"; `queueNext`, `queueLast`), `ProgressSync.swift` (`isEnabled`; always false under `FORCE_NO_SYNC`) |
 | Theme and fonts | `NeoClub/App/Theme.swift` (`Font.univers`, `universBold`, `jacoby` scale with the text style nearest each size) |
 | Row swipes, context menus | `NeoClub/Features/Components.swift` (`.episodeSwipeActions`) |
-| Debug menu | hold the profile picture on Home → `Features/Debug/DebugMenu.swift` (sync toggle, Files export, API Explorer) |
-| Research notes | `docs/original-app-analysis.md` (API notes, Music traces) |
-| Release | `scripts/make-release.sh` builds a Release IPA into `dist/` and prints the version, build, date, size and minimum OS for the owner's existing AltStore source. **Don't generate a source.json**: the owner already has a source. |
+| Account | `NeoClub/Features/Profiles/AccountView.swift`: profile, switch profile, *Sync Listening Progress*, *Show Downloads in Files*, sign out, version footer (`NeoClub/App/AppVersion.swift`) |
+| Launch state | `MainTabView.SceneMemory`: tab and navigation paths kept in memory for the process only |
+| Research notes | `docs/original-app-analysis.md` (the original app's API notes, Music's Now Playing traces) |
+| Release | `scripts/make-release.sh` (needs a clean, committed tree) builds `dist/NeoClub-<version>-<build>.ipa`, tags `build-<build>`, and prints the version, build, date, size and minimum OS for the owner's existing AltStore source. **Don't generate a source.json**: the owner already has a source. |
 
 ## Now Playing: how it works now (from tracing Music)
 
@@ -93,9 +96,9 @@ Without `sourceFrame`, the card slides off the bottom of the screen.
 
 **Fixed layout.** `NowPlayingPresentation` lays the player out at the window's size, pinned top-leading, in the named coordinate space `nowPlaying` (this is what lets the card clip it like Music's). It must be an `overlay(alignment: .topLeading)` on a `Color.clear` base: a fixed-size frame inside a flexible `.frame(maxWidth: .infinity, ...)` is *centred* by SwiftUI once the hosting view is smaller than the content, which on the Duo's inner screen shifted the player up and left during the close and left the artwork's bottom edge as a strip at the bar (device recording, 2026-11-12). The VM's outer panel hid this; the inner panel and the phone show it. The artwork reports its frame there through `NowPlayingPresenter.artworkFrame`.
 
-**Close state.** `dismissing`, `wantsShow` and `closeAnimationsStarted`. A present can't start during a close (that crashed UIKit); a tap on the bar during a landing is kept and presented when the close finishes. The transition coordinator's completion settles both outcomes (`closeFinished` or `closeCancelled`); `presentationControllerDidDismiss` is a backup, and `present()` clears a close whose controller is already off screen. A committed drag sets `showNowPlaying = false` at release, not at the end. The bar opens through `NowPlayingPresenter.open()` (sets the flag *and* asks for the presentation), and `presentationControllerDidDismiss` finishes the bookkeeping itself if `willDismiss` never ran: otherwise the player stays marked open and a tap on the bar sets an already-true flag and does nothing (the "doesn't reopen after a flick" report). DEBUG builds log every state change to `Library/Logs/signin-log.txt` (lines starting `NP`); `-debugCycleNowPlaying <hold> <count>` opens and closes it in a loop.
+**Close state.** `dismissing`, `wantsShow` and `closeAnimationsStarted`. A present can't start during a close (that crashed UIKit); a tap on the bar during a landing is kept and presented when the close finishes. The transition coordinator's completion settles both outcomes (`closeFinished` or `closeCancelled`); `presentationControllerDidDismiss` is a backup, and `present()` clears a close whose controller is already off screen. A committed drag sets `showNowPlaying = false` at release, not at the end. The bar opens through `NowPlayingPresenter.open()` (sets the flag *and* asks for the presentation), and `presentationControllerDidDismiss` finishes the bookkeeping itself if `willDismiss` never ran: otherwise the player stays marked open and a tap on the bar sets an already-true flag and does nothing (the "doesn't reopen after a flick" report). The presenter used to log every state change (`NP …` lines) and had `-debugCycleNowPlaying <hold> <count>` to loop open and close; that is gone from `main` but kept at the `debug-harness` tag, which is how the flick bug below was found from the phone's own log.
 
-**Flick during the open (fixed 2026-11-13, owner-confirmed on the Duo).** A flick while the card is still opening makes UIKit reverse the presentation itself: no `willDismiss`/`didDismiss`, so none of the close's animations run (black card fill, content offset, card jumps back then closes again), and the presenter was left marked open with nothing on screen (the bar then did nothing). Two defences: `isModalInPresentation = true` from `present()` until the open's transition completes (the sheet's drag can't take hold; an early flick is ignored), and `openFinished` / `healIfStale()` reset a presentation that is no longer attached. The VM never reproduced the reversal (its flicks are ignored or close cleanly); the phone's `signin-log.txt` (pulled with `devicectl device copy from ... --domain-type appDataContainer --domain-identifier dev.cobre.aioclub --source Library/Logs/signin-log.txt`) showed it as a close with no `willDismiss`.
+**Flick during the open (fixed 2026-11-13, owner-confirmed on the Duo).** A flick while the card is still opening makes UIKit reverse the presentation itself: no `willDismiss`/`didDismiss`, so none of the close's animations run (black card fill, content offset, card jumps back then closes again), and the presenter was left marked open with nothing on screen (the bar then did nothing). Two defences: `isModalInPresentation = true` from `present()` until the open's transition completes (the sheet's drag can't take hold; an early flick is ignored), and `openFinished` / `healIfStale()` reset a presentation that is no longer attached. The VM never reproduced the reversal (its flicks are ignored or close cleanly); the phone's state log (from the `debug-harness` build, pulled with `devicectl device copy from ... --domain-type appDataContainer --domain-identifier dev.cobre.aioclub --source Library/Logs/signin-log.txt`) showed it as a close with no `willDismiss`.
 
 **Interactive close bookkeeping.** The sheet delegate's `presentationControllerWillDismiss` starts the close, and `notifyWhenInteractionChanges` commits it on release.
 
@@ -118,16 +121,34 @@ Inset-independent facts from Music (kept in the code):
 
 If vertical positions need checking again, get a device screenshot of Music and NeoClub in the same state and compare in pt (3 px per pt on the Duo).
 
+### Device calibration against Music, 2026-11-13 (the numbers now in the code)
+
+The owner took the same states on the Duo in Music and NeoClub (outer, inner portrait, landscape; playing, Up Next, Info/Lyrics) with the text size set smaller. Method: put each pair side by side with a pixel ruler (`PIL`; no numpy was available), read positions in pt (2.951 px/pt on the outer screen, 2.103 on the inner screen), and find the scrubber and volume tracks by scanning one column for bright runs. Differences found, and what changed:
+
+| State | Was | Now |
+|---|---|---|
+| Outer, Up Next | header artwork 51 pt from the top; speed/sleep capsules 44 pt tall (`SpeedButton` is 44 pt and `minHeight: 38` didn't cap it) | header 32 pt from the top (as Music, on both screens); capsules a fixed 37 pt; 8.4 pt under the header; panel 13.4 pt under them |
+| Outer, playing | transport 3.7 pt high, times 1.8 pt high, bottom row 1.2 pt low | transport padding 1.9, volume padding 22.3, bottom-row padding 20.8, bottom padding 17.2; scrubber-to-times gap 5.8 (everywhere) |
+| Inner portrait, playing | artwork 1.7 pt high, scrubber 1.4 pt low, bottom row 1.7 pt low | title padding 32.3, scrubber padding 18.5, bottom-row padding 34.7, bottom padding 17.7 |
+| Landscape, playing | artwork 317 pt (capped by the inset-reduced height) instead of 330; whole column 8.6 pt high; title row 2.4 pt high | artwork 330 (cap from the full window height); column shifted down 8.6 pt (`.padding(.bottom, -8.6)`); scrubber padding 9.6 |
+| Landscape, Up Next | list 3.8 pt low, then rows 1.9 pt low | panel top padding 14.3 |
+
+After the changes every pair matched within about 1 pt (scrubber and volume tracks within 0.5 pt). Not compared: Info versus Lyrics panels (different content), laptop posture. Rows were compared with a real queue (56 pt pitch, 48 pt artwork on both).
+
 ## Open items / next steps
 
-1. **The owner checks the new close on the Duo.** Flick, slow drag, tap the grabber, laptop posture, and a list scrolled down in Up Next. They also check that dragging still feels right: it now uses the sheet's own resistance and its rules for closing versus snapping back. If something's off, ask for a screen recording of NeoClub and Music doing the same gesture.
-2. **Not yet checked:**
-   - **Not checked at all:** the close on the Duo's inner screen, portrait and landscape (bar-slot geometry, the wide bar layout), and in split view.
-   - **Checked only in the simulator placeholder build:** the close with Up Next or Info open (the small header artwork).
-3. **Release:** once the owner is happy, run `scripts/make-release.sh` and give them the printed values for their AltStore source entry.
-4. Smaller follow-ups:
-   - Compare the open animation with Music again now that the presentation has changed.
-   
+1. **Release.** Run `scripts/make-release.sh` from a clean tree and give the owner the printed values for their AltStore source (they host it). They test the *Release* build once on the Duo first: tap, drag and flick closes, reopen after a flick, a flick right after opening, sign-in surviving a relaunch (and the app opening on Home), playback on Whit's Flop only, lock-screen controls, downloads, all three screen layouts.
+2. **Not compared with Music yet:** the Info versus Lyrics panels, laptop posture, flick release-velocity feel, and the first half second of an open (a flick there is ignored; Music's behaviour unchecked).
+3. **Left as designed differences:** an extra "From ..." line under "Up Next"; speed and sleep capsules instead of shuffle/repeat; Jacoby/Univers type.
+
+## Debug tools (removed from `main`, kept at tag `debug-harness`)
+
+Everything that was `#if DEBUG` or launch-argument driven is gone from the app so a release has none of it. The last commit that has it is tagged `debug-harness` (`git show debug-harness`). To use it, check that tag out into a separate worktree (`git worktree add ../NeoClub-debug debug-harness`), build from there and never merge it back:
+- launch arguments: `-debugUIOnly` (placeholder episode, no account), `-debugPlayTest` (plays Whit's Flop with its album queued), `-debugTab browse|library|search`, `-debugAlbum`, `-debugEpisode <id>`, `-debugRestoreTestEpisode` (Whit's Flop back to Complete at 1301240), `-debugDownload <id>`, `-debugCycleNowPlaying <hold> <count>`
+- `NowPlayingPresenter.trace` (state machine log to `Library/Logs/signin-log.txt`), `SignInLog`, `DebugAPILog` (raw responses in `Library/Logs/api-log`)
+- the Debug menu (hold the profile picture on Home) and API Explorer
+- `-DFORCE_UI_ONLY` for VM builds with no account (`-DFORCE_NO_SYNC` stays in `main`)
+
 ## Tooling and recipes
 
 **Devices.**
@@ -140,7 +161,7 @@ If vertical positions need checking again, get a device screenshot of Music and 
   - display 1 is the outer screen, 1398×2034 px; there's no fold control
   - the first launch shows white for about 6–9 s
   - taps get dropped sometimes, so take a screenshot before retrying
-  - launch with `-debugUIOnly` for a placeholder episode with no account
+  - a placeholder episode with no account needs the `debug-harness` build (`-debugUIOnly`)
   - record with `xcrun simctl io <S> recordVideo --display=1 --force out.mov`; the recordings are smooth and good for timing
   - set Dynamic Type with `xcrun simctl ui <S> content_size <size>`
   - local Frida can't attach to simulator apps
@@ -152,7 +173,7 @@ If vertical positions need checking again, get a device screenshot of Music and 
     - `screen.screenshot {max_dimension}` (base64 JPEG)
     - `display.posture {"hinge":"closed","orientation":"portrait"}` for the outer screen; `{"hinge":"open","orientation":"landscape-left"}` for inner portrait
   - Install by zipping `Payload/NeoClub.app` into an IPA, then `guest push duo-lab <ipa> /private/var/tmp/`, then `apps.install {"path":…}`.
-  - The VM is signed in to the real account, so VM builds need `OTHER_SWIFT_FLAGS='$(inherited) -DFORCE_NO_SYNC'` (or `-DFORCE_UI_ONLY` for no account), built to `build/vm`.
+  - The VM is signed in to the real account, so VM builds need `OTHER_SWIFT_FLAGS='$(inherited) -DFORCE_NO_SYNC'` (`-DFORCE_UI_ONLY` exists only in the `debug-harness` tag), built to `build/vm`.
   - Apple Music in the VM has a song queued and is the reference for tracing.
 - **Frida against the VM:**
   - `frida -H 192.168.64.7 -n <Music|NeoClub> -q -t <secs> -l script.js < /dev/null`

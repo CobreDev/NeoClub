@@ -20,6 +20,8 @@
 	<string>1</string>
 	<key>LSSupportsOpeningDocumentsInPlace</key>
 	<true/>
+	<key>NeoClubCommit</key>
+	<string>$(NEOCLUB_COMMIT)</string>
 	<key>UIAppFonts</key>
 	<array>
 		<string>JacobyICGBlack.ttf</string>

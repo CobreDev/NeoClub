@@ -113,9 +113,6 @@ struct SleepTimerButton: View {
             ForEach([60, 45, 30, 15, 5], id: \.self) { m in
                 Button("\(m) Minutes") { player.setSleepTimer(.minutes(m)) }
             }
-            #if DEBUG
-            Button("10 Seconds (Debug)") { player.setSleepTimer(.seconds(10)) }
-            #endif
             if player.sleepTimer != .off {
                 Divider()
                 Button("Turn Off Timer", role: .destructive) { player.setSleepTimer(.off) }

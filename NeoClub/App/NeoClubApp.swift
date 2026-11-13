@@ -62,19 +62,6 @@ final class AppModel {
     private static let profileKey = "selectedViewerID"
 
     func bootstrap() async {
-        #if DEBUG
-        // `-debugUIOnly`: the app's screens with a placeholder episode in the mini player, no account and no
-        // network, for testing transitions in the simulator.
-        var uiOnly = ProcessInfo.processInfo.arguments.contains("-debugUIOnly")
-        #if FORCE_UI_ONLY
-        uiOnly = true  // vphone test builds (the VM can't pass launch arguments)
-        #endif
-        if uiOnly {
-            AudioPlayer.shared.debugLoadPlaceholder()
-            phase = .ready
-            return
-        }
-        #endif
         guard await AuthService.shared.isSignedIn else { phase = .signedOut; return }
         // Open straight into the last profile from the saved list (no spinner while /viewer loads, and it works
         // offline); the list is refreshed behind it.

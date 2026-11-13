@@ -151,19 +151,6 @@ final class AudioPlayer {
         }
     }
 
-    #if DEBUG
-    /// `-debugUIOnly`: Whit's Flop's title and cover in the mini player, nothing loaded or playable.
-    func debugLoadPlaceholder() {
-        let json: [String: Any] = ["id": "placeholder", "name": "#001: Whit's Flop", "album_name": "#01: The Adventure Begins",
-                                   "episode_number": "001", "media_length": 1_301_240,
-                                   "thumbnail_large": "https://d23sy43gbewnpt.cloudfront.net/public/images/content/1_-_whits_flop.png"]
-        guard let data = try? JSONSerialization.data(withJSONObject: json),
-              let stub = try? JSONDecoder().decode(Episode.self, from: data) else { return }
-        episode = stub
-        duration = 1301.24
-    }
-    #endif
-
     private var pendingRestore: (episode: Episode, groupingID: String?)?
     private var restoreTask: Task<Void, Never>?
 
@@ -198,16 +185,12 @@ final class AudioPlayer {
         }
         guard ProgressSync.isEnabled else { return }
         Task {
-            do {
-                try await AIOService.saveProgress(episodeID: item.id, status: "New", positionMs: 0)
-            } catch {
-                SignInLog.write("mark unplayed failed: \(error.localizedDescription)")
-            }
+            try? await AIOService.saveProgress(episodeID: item.id, status: "New", positionMs: 0)
         }
     }
 
     /// Episodes finished in this app on this device, remembered across launches. They count as played everywhere
-    /// in the app even when progress sync is off (debug builds), so the account never has to hear about them.
+    /// in the app even when progress sync is off, so the account never has to hear about them.
     private(set) var finishedHere: Set<String> = Set(UserDefaults.standard.stringArray(forKey: "finishedHere") ?? [])
 
     private func rememberFinished(_ id: String) {
@@ -242,9 +225,7 @@ final class AudioPlayer {
                     if played && length == 0 { length = (try? await AIOService.episode(item.id))?.mediaLength ?? 0 }
                     try await AIOService.saveProgress(episodeID: item.id, status: played ? "Complete" : "New",
                                                       positionMs: played ? length : 0)
-                } catch {
-                    SignInLog.write("mark album failed for \(item.id): \(error.localizedDescription)")
-                }
+                } catch {}
                 try? await Task.sleep(for: .milliseconds(250))
             }
         }
@@ -261,9 +242,7 @@ final class AudioPlayer {
                 var length = length
                 if length == 0 { length = (try? await AIOService.episode(item.id))?.mediaLength ?? 0 }
                 try await AIOService.saveProgress(episodeID: item.id, status: "Complete", positionMs: length)
-            } catch {
-                SignInLog.write("mark played failed: \(error.localizedDescription)")
-            }
+            } catch {}
         }
     }
 
