@@ -33,6 +33,14 @@ struct GroupingView: View {
                 .episodeContextMenu(episode, groupingID: groupingID)
                 .episodeSwipeActions(episode)
             }
+            if let released = releaseLine {
+                // Like Music's album footer: the date, small and muted.
+                Text(released)
+                    .font(.univers(12, relativeTo: .footnote))
+                    .foregroundStyle(.secondary)
+                    .listRowSeparator(.hidden)
+                    .listRowBackground(Color.clear)
+            }
         }
         .listStyle(.plain)
         .aioBackground(artworkURL: shown?.artworkURL)
@@ -108,6 +116,14 @@ struct GroupingView: View {
         let total = episodes.compactMap(\.mediaLength).reduce(0, +)
         if total > 0 { parts.append(total.msDurationText) }
         return parts.joined(separator: " · ")
+    }
+
+    /// "Released November 5, 2005", or the first and last dates when the episodes came out over time (a series, a year).
+    private var releaseLine: String? {
+        let dates = episodes.compactMap(\.releaseDate)
+        guard let first = dates.min(), let last = dates.max() else { return nil }
+        let a = Episode.releaseText(first), b = Episode.releaseText(last)
+        return a == b ? "Released \(a)" : "Released \(a) – \(b)"
     }
 
     /// Where the profile is in this album: the episode in progress, else the first unplayed one.

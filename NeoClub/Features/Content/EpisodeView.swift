@@ -81,6 +81,13 @@ struct EpisodeView: View {
                 if let error, detail == nil {
                     ErrorView(message: error) { await load() }
                 }
+
+                // Like Music's album footer: the date, small and muted.
+                if let date = shown.releaseDate {
+                    Text("Released \(Episode.releaseText(date))")
+                        .font(.univers(12, relativeTo: .footnote))
+                        .foregroundStyle(.secondary)
+                }
             }
             .padding(20)
             .frame(maxWidth: 720)

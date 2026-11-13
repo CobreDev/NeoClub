@@ -183,6 +183,25 @@ struct Episode: Decodable, Identifiable, Hashable {
         return parts.joined(separator: " · ")
     }
 
+    /// The air date ("2005-10-29T06:00:00.000Z", midnight in Central time), read as UTC so every time zone shows the same day.
+    var releaseDate: Date? {
+        guard let airDate, airDate.count >= 10 else { return nil }
+        return Self.dayParser.date(from: String(airDate.prefix(10)))
+    }
+
+    private static let dayParser: DateFormatter = {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.timeZone = TimeZone(identifier: "UTC")
+        f.dateFormat = "yyyy-MM-dd"
+        return f
+    }()
+
+    /// "November 5, 2005", in the device's language and region.
+    static func releaseText(_ date: Date) -> String {
+        date.formatted(Date.FormatStyle(date: .long, time: .omitted, locale: .autoupdatingCurrent, timeZone: TimeZone(identifier: "UTC")!))
+    }
+
     enum CodingKeys: String, CodingKey {
         case id, name, type, subtype, description, progress, characters
         case shortName = "short_name", episodeNumber = "episode_number", albumName = "album_name"

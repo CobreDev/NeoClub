@@ -102,3 +102,21 @@ private func episode(_ id: String, name: String? = nil, shortName: String? = nil
         #expect(cookies.allSatisfy { $0.path == "/private/audio/AppleHLS1" && $0.domain == "media.example.com" })
     }
 }
+
+@Suite struct ReleaseDateTests {
+    private func released(_ airDate: String) -> Episode {
+        try! JSONDecoder().decode(Episode.self, from: Data(#"{"id":"a","air_date":"\#(airDate)"}"#.utf8))
+    }
+
+    @Test func midnightCentralShowsTheSameDayInEveryTimeZone() {
+        let date = released("2005-10-29T06:00:00.000Z").releaseDate
+        #expect(date != nil)
+        #expect(Episode.releaseText(date!).contains("29"))
+        #expect(Episode.releaseText(date!).contains("2005"))
+    }
+
+    @Test func missingOrMalformedDateIsNil() {
+        #expect(released("").releaseDate == nil)
+        #expect(released("soon").releaseDate == nil)
+    }
+}
