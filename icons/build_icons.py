@@ -92,11 +92,12 @@ def make_gold(out,name='AppIconGold',tinted_bg=True):
             grp([L('bg'+k+'.png','background',k,False) for k in ('','-tinted')],'Background',0)]
     # Dark: no background layer of ours at all; the icon's fill becomes the system's own dark material, so it matches
     # every other app's dark icon (a hand-picked gray never quite did).
-    GOLDFILL={"automatic-gradient":"extended-srgb:0.94000,0.70000,0.27000,1.00000"}
+    # No colour in the icon's own fill: gold lives only on the Light look's background layer. A gold fill (even one
+    # overridden for Dark) made iOS tint the whole Dark icon yellow on the phone, though Icon Composer's renderer didn't.
     for g in groups:
         for l in g['layers']:
             if l['name']=='background': l['hidden-specializations']=[{"value":False},{"appearance":"dark","value":True},{"appearance":"tinted","value":True}]
-    json.dump({"fill":GOLDFILL,"fill-specializations":[{"value":GOLDFILL},{"appearance":"dark","value":"system-dark"}],"groups":groups,
+    json.dump({"fill":"automatic","groups":groups,
       "supported-platforms":{"squares":"shared"}},open(d+'/icon.json','w'),indent=2)
 
 def generate():
