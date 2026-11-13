@@ -106,6 +106,7 @@ final class NowPlayingPresenter: NSObject {
     /// if the flag was already true while nothing was on screen (a state that must never persist, but a missed
     /// delegate callback after a very fast flick would leave it there).
     func open() {
+        healIfStale()
         AudioPlayer.shared.showNowPlaying = true
         update(show: true)
     }
@@ -174,14 +175,47 @@ final class NowPlayingPresenter: NSObject {
         isPresented = true
         let flies = prepareOpenArtwork()
         root.present(vc, animated: true)
-        if flies {
-            if let coordinator = vc.transitionCoordinator {
-                coordinator.animate(alongsideTransition: { [weak self] _ in self?.startOpenArtwork(vc) },
-                                    completion: { [weak self] _ in self?.finishOpenArtwork() })
-            } else {
-                artworkFlying = false  // no transition to fly in (it must never stay hidden)
-            }
+        if let coordinator = vc.transitionCoordinator {
+            coordinator.animate(alongsideTransition: { [weak self] _ in if flies { self?.startOpenArtwork(vc) } },
+                                completion: { [weak self] ctx in self?.openFinished(vc, cancelled: ctx.isCancelled) })
+        } else {
+            artworkFlying = false  // no transition to fly in (it must never stay hidden)
         }
+    }
+
+    /// The open's transition is over. A flick during the open makes UIKit reverse the presentation itself (the card
+    /// sinks back to the bar) without any dismissal callbacks, which left the player marked open with nothing on screen
+    /// and the bar unable to open it again.
+    private func openFinished(_ vc: UIHostingController<AnyView>, cancelled: Bool) {
+        guard presented === vc else { return }
+        if cancelled || vc.presentingViewController == nil {
+            trace("open reversed")
+            resetClosedState()
+        } else {
+            finishOpenArtwork()
+        }
+    }
+
+    /// Nothing is on screen: drops every trace of a presentation that UIKit abandoned without telling us.
+    private func resetClosedState() {
+        presented = nil
+        dismissing = nil
+        isPresented = false
+        wantsShow = false
+        AudioPlayer.shared.showNowPlaying = false
+        closeAnimationsStarted = false
+        barContentHidden = false
+        isClosing = false
+        artworkFlying = false
+        flyingArtwork?.removeFromSuperview()
+        flyingArtwork = nil
+    }
+
+    /// Marks a presentation that is no longer attached (and isn't mid-transition) as closed.
+    func healIfStale() {
+        guard let vc = presented, !vc.isBeingPresented, vc.presentingViewController == nil || vc.view.window == nil else { return }
+        trace("healed a stale presentation")
+        resetClosedState()
     }
 
     // MARK: Open: the artwork grows out of the bar's artwork slot

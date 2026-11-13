@@ -193,7 +193,7 @@ struct MiniPlayer: View {
         .gesture(DragGesture(minimumDistance: 8, coordinateSpace: .global)
             .onChanged { v in
                 let up = -v.translation.height
-                if up > 12, up > abs(v.translation.width), !NowPlayingPresenter.shared.isPresented { NowPlayingPresenter.shared.open() }
+                if up > 12, up > abs(v.translation.width) { NowPlayingPresenter.shared.open() }
             })
         .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
     }
