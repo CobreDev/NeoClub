@@ -8,6 +8,7 @@ struct HomeView: View {
     @State private var home: HomeResponse?
     @State private var error: String?
     @State private var showAccount = false
+    @State private var showExplorer = false
 
     var body: some View {
         ScrollView {
@@ -43,7 +44,7 @@ struct HomeView: View {
             ToolbarItem(placement: .topBarTrailing) {
                 // Tap: Account. Hold: the debug menu.
                 Menu {
-                    DebugMenu()
+                    DebugMenu { showExplorer = true }
                 } label: {
                     if let profile = app.profile {
                         ProfileBadge(profile: profile, size: 36, showsName: false)
@@ -61,6 +62,14 @@ struct HomeView: View {
             .sharedBackgroundVisibility(.hidden)
         }
         .sheet(isPresented: $showAccount) { AccountView() }
+        .sheet(isPresented: $showExplorer) {
+            NavigationStack {
+                APIExplorerView()
+                    .toolbar {
+                        ToolbarItem(placement: .topBarTrailing) { Button("Done") { showExplorer = false } }
+                    }
+            }
+        }
         .refreshable { await load(force: true) }
         .task { if home == nil { await load() } }
     }

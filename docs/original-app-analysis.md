@@ -117,3 +117,11 @@ Frida trace of Music during a flick close (observation only):
 NeoClub uses the public equivalent: `.fullScreenCover` with `.navigationTransition(.zoom(...))` from a
 `matchedTransitionSource` on the mini player, which gets the same zoom controller and Liquid Glass morph. Not reproducible
 publicly: Music's subclass keeps the card full width while dragged (the system zoom scales it down with the drag).
+
+### Now Playing presentation style (traced 2026-11-12)
+Music presents `NowPlayingViewController` with `modalPresentationStyle = .formSheet` (`_UIFormSheetPresentationController`),
+one `.large` detent, no grabber, and the sheet controller's private `_wantsFullScreen = YES`, so the sheet fills the window
+(`UIDropShadowView` 951×669 on the inner screen). Its swipes on song rows: leading Play Next only
+(`text.line.first.and.arrowtriangle.forward`, system indigo, icon only), trailing Delete (`trash.fill`, system red).
+With `.overFullScreen` instead, the zoom dismissal pushes the page behind back and springs it out; as a full-screen form
+sheet it stays still and the mini player keeps its landing bounce.

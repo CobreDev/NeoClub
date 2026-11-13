@@ -3,6 +3,8 @@ import SwiftUI
 /// Testing switches, opened by holding the profile picture on Home.
 struct DebugMenu: View {
     @Environment(DownloadStore.self) private var downloads
+    /// Opens the API Explorer (presented by the screen that holds the menu).
+    var openExplorer: () -> Void
     @State private var syncProgress = ProgressSync.isEnabled
     @State private var exportDownloads = DownloadStore.exportsToFiles
 
@@ -16,6 +18,9 @@ struct DebugMenu: View {
                 Label("Show Downloads in Files", systemImage: "folder")
             }
             .onChange(of: exportDownloads) { _, on in downloads.setExportsToFiles(on) }
+            Button(action: openExplorer) {
+                Label("API Explorer", systemImage: "hammer.fill")
+            }
         }
     }
 }

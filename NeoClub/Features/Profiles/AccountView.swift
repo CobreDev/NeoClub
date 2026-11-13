@@ -29,16 +29,6 @@ struct AccountView: View {
                         .aioRow()
                     }
                 }
-                #if DEBUG
-                Section("Developer") {
-                    NavigationLink {
-                        APIExplorerView()
-                    } label: {
-                        Label("API Explorer", systemImage: "hammer.fill")
-                    }
-                    .aioRow()
-                }
-                #endif
                 Section {
                     Button("Sign Out", role: .destructive) { confirmSignOut = true }.aioRow()
                 } footer: {
