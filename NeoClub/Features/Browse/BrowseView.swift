@@ -19,8 +19,9 @@ struct BrowseView: View {
                  colors: [Color(hex: 0x2FB8F0), Color(hex: 0x1659C7)]),
         Category(type: "Collection", title: "Collections", symbol: "square.grid.2x2.fill",
                  colors: [Color(hex: 0x9B6CF0), Color(hex: 0x5631B5)]),
+        // Deep forest green: the podcast logo is itself a bright green, so a minty tile blended into it.
         Category(type: "Podcast Year", title: "Podcasts", symbol: "mic.fill",
-                 colors: [Color(hex: 0x3CC48A), Color(hex: 0x0E7C5A)]),
+                 colors: [Color(hex: 0x0E6B3C), Color(hex: 0x032E1A)]),
         Category(type: "Book Series", title: "Books", symbol: "book.fill",
                  colors: [Color(hex: 0x20C5C0), Color(hex: 0x0A7A8C)]),
     ]
