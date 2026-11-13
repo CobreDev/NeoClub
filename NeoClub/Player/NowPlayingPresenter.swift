@@ -190,7 +190,7 @@ final class NowPlayingPresenter: NSObject {
 
     /// Runs when a close is over (idempotent: the tap close, the sheet's completion and its delegate all call it).
     private func closeFinished() {
-        guard dismissing != nil || flyingArtwork != nil || closingStage != nil else { return }
+        guard dismissing != nil || flyingArtwork != nil else { return }
         trace("closeFinished wantsShow=\(wantsShow)")
         dismissing?.view.alpha = 1
         dismissing = nil
@@ -198,14 +198,11 @@ final class NowPlayingPresenter: NSObject {
         barContentHidden = false
         flyingArtwork?.removeFromSuperview()
         flyingArtwork = nil
-        closingStage?.removeFromSuperview()
-        closingStage = nil
         isClosing = false
         if wantsShow { present() }
     }
 
     private var flyingArtwork: UIView?
-    private var closingStage: UIView?
     private var closeAnimationsStarted = false
 
     /// The finger-driven close was cancelled (let go short of the threshold): the sheet springs back, Now Playing is open.
@@ -229,13 +226,15 @@ final class NowPlayingPresenter: NSObject {
         runCloseAnimations(vc)
     }
 
-    /// Music's animations alongside the sheet's landing (traced 2026-11-12, see the type's notes).
+    /// Music's animations alongside the sheet's landing (measured on Music with Frida, 2026-11-12: presentation-layer
+    /// geometry of every view in the card, sampled through a close).
     ///
-    /// Music lays its player out again at the bar's size inside the shrinking card, so its controls ride up with the
-    /// card's bottom edge while the artwork shrinks into the bar's artwork slot and everything else fades. SwiftUI
-    /// can't follow the card's frame animation, so the close swaps in UIKit stand-ins: snapshots of the player above
-    /// and below the artwork, pinned to the card's top and bottom edges (UIKit resizes them with the card on its
-    /// spring), and a copy of the artwork that flies into the bar.
+    /// Music's player content is never scaled or moved inside the card: the title stays 266 pt wide and 396 pt below
+    /// the card's top edge, the scrubber 350 pt wide, the play button 32 pt, for the whole close. The card (a clipping
+    /// view) just shrinks over it, and the content fades out (0.7153 s on its overdamped spring, grabber quicker).
+    /// Only the artwork travels: it shrinks into the bar's artwork slot on the card's spring. So here the player stays
+    /// laid out at the window's size pinned to the card's top-left (see NowPlayingPresentation), the card clips it, and
+    /// a copy of the artwork flies into the bar.
     private func runCloseAnimations(_ vc: UIViewController) {
         guard !closeAnimationsStarted, let player = vc.view, let card = player.superview else { return }
         closeAnimationsStarted = true
@@ -243,54 +242,21 @@ final class NowPlayingPresenter: NSObject {
         let spring = { UIViewPropertyAnimator(duration: 0, timingParameters:
             UISpringTimingParameters(mass: 1, stiffness: 333.3333, damping: 36.5148, initialVelocity: .zero)) }
 
-        // The artwork, taken as it's drawn now (the loaded image when there is one).
+        // The artwork copy goes over the real one (hiding the real one first would draw a frame without it).
         let artRect = artworkFrame.intersection(full)
         var art: UIView?
-        if !artRect.isEmpty {
-            if let image = AudioPlayer.shared.artworkImage {
-                let view = UIImageView(image: image)
-                view.contentMode = .scaleAspectFill
-                art = view
-            } else {
-                art = player.resizableSnapshotView(from: artRect, afterScreenUpdates: false, withCapInsets: .zero)
-            }
-        }
-
-        // The copy goes over the artwork first (hiding the real one draws a frame without it).
-        if let art {
-            art.clipsToBounds = true
-            art.layer.cornerCurve = .continuous
-            art.layer.cornerRadius = artworkCornerRadius
-            art.frame = card.convert(artRect, from: player)
-            card.addSubview(art)
-            flyingArtwork = art
-        }
-
-        // The rest of the player, without the artwork: hide it, draw, then snapshot above and below it.
-        if art != nil {
+        if !artRect.isEmpty, let image = AudioPlayer.shared.artworkImage {
+            let view = UIImageView(image: image)
+            view.contentMode = .scaleAspectFill
+            view.clipsToBounds = true
+            view.layer.cornerCurve = .continuous
+            view.layer.cornerRadius = artworkCornerRadius
+            view.frame = card.convert(artRect, from: player)
+            card.addSubview(view)
+            flyingArtwork = view
+            art = view
             isClosing = true
-            player.setNeedsLayout()
-            player.layoutIfNeeded()
         }
-        let split = artRect.isEmpty ? full.height * 0.55 : min(full.height, artRect.maxY + 8)
-        let stage = UIView(frame: card.bounds)
-        stage.autoresizingMask = [.flexibleWidth, .flexibleHeight]
-        stage.isUserInteractionEnabled = false
-        let topRect = CGRect(x: 0, y: 0, width: full.width, height: split)
-        let bottomRect = CGRect(x: 0, y: split, width: full.width, height: full.height - split)
-        if let top = player.resizableSnapshotView(from: topRect, afterScreenUpdates: art != nil, withCapInsets: .zero) {
-            top.frame = card.convert(topRect, from: player)
-            top.autoresizingMask = [.flexibleBottomMargin, .flexibleLeftMargin, .flexibleRightMargin]
-            stage.addSubview(top)
-        }
-        if let bottom = player.resizableSnapshotView(from: bottomRect, afterScreenUpdates: false, withCapInsets: .zero) {
-            bottom.frame = card.convert(bottomRect, from: player)
-            bottom.autoresizingMask = [.flexibleTopMargin, .flexibleLeftMargin, .flexibleRightMargin]
-            stage.addSubview(bottom)
-        }
-        if let art { card.insertSubview(stage, belowSubview: art) } else { card.addSubview(stage) }
-        closingStage = stage
-        player.alpha = 0
 
         // The card's own background (the sheet's `UIDropShadowView`, opaque in the app's dark appearance) goes clear on
         // the card's spring, as in Music's trace (white to clear over the landing). Left alone it stays a black pill
@@ -305,13 +271,14 @@ final class NowPlayingPresenter: NSObject {
 
         // The player fades out on Music's curve (its MPCubicSpring, sampled as this cubic).
         let fade = UIViewPropertyAnimator(duration: 0.7153, controlPoint1: CGPoint(x: 0.1878, y: 0.0023),
-                                          controlPoint2: CGPoint(x: 0.5399, y: 0.9629)) { stage.alpha = 0 }
+                                          controlPoint2: CGPoint(x: 0.5399, y: 0.9629)) { player.alpha = 0 }
         fade.startAnimation()
 
         // The bar's content fades in over the landing (just the content: see `barContentHidden`).
         barContentHidden = true
         DispatchQueue.main.async { [weak self] in
-            withAnimation(.easeInOut(duration: 0.5)) { self?.barContentHidden = false }
+            // Music: CABasicAnimation opacity 0 to 1, 0.5 s, the default timing function (0.25, 0.1, 0.25, 1).
+            withAnimation(.timingCurve(0.25, 0.1, 0.25, 1, duration: 0.5)) { self?.barContentHidden = false }
         }
 
         // The artwork flies into the bar's artwork slot on the card's spring, inside the card (so the card clips it).

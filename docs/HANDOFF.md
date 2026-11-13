@@ -85,19 +85,20 @@ Without `sourceFrame`, the card slides off the bottom of the screen.
 
 **Drag.** The sheet's own pan (`_UISheetInteraction`), as in Music. The old hand-made `PresentedCard` pan is gone. Don't reapply detents while a drag is in progress: it made the sheet spring back instead of closing.
 
-**Close stand-ins** (`runCloseAnimations`). SwiftUI can't follow the card's frame animation. Music lays its player out again at bar size; we imitate that with UIKit stand-ins:
-- Snapshot the player above and below the artwork. Autoresizing pins the top part to the card's top and the bottom part to the card's bottom, so the controls ride up with the card's bottom edge.
-- Fade them on Music's curve: 0.7153 s, cubic (0.1878, 0.0023, 0.5399, 0.9629), sampled from its overdamped spring (mass 3, stiffness 500, damping 1000).
-- A copy of the artwork flies on the 333.33/36.51 spring to the bar's artwork slot: 32 pt, 14 pt from the leading edge, corner radius 6.
-- The bar's content fades in over 0.5 s.
-- The real artwork and its shadow hide through `NowPlayingPresenter.isClosing`.
-- For a tap close, `runCloseAnimations` runs *before* `dismiss` so the stand-ins resize with the card.
+**Close, as measured on Music with Frida** (presentation-layer geometry of every view in the card, sampled through a close; `sample.js` style script, see recipes).
+- The card (UIKit's sheet animation) shrinks to the bar on mass 1 / stiffness 333.33 / damping 36.51. NeoClub's card path matches Music's: at card widths 389 / 351 / 301 pt the heights are 403 / 266 / 86 in both.
+- **Music's player content is never scaled or moved inside the card.** The title stays 266 pt wide and about 396 pt below the card's top edge, the scrubber 350 pt, the play button 32 pt, for the whole close. The card just clips it as it shrinks. Nothing rides up with the bottom edge. (An earlier version of this code used top and bottom snapshot stand-ins that did ride up; that was wrong.) So the real player stays laid out at the window's size pinned top-leading (`NowPlayingPresentation`) and the card clips it.
+- The player fades out (`MusicCoreUI.PassthroughView` / lyrics background opacity 1 to 0 over 0.7153 s, cubic (0.1878, 0.0023, 0.5399, 0.9629)).
+- The grabber is a keyframe animation: opacity 1, 0, 0 at key times 0, 0.5, 1 over 0.5 s on the default curve (0.25, 0.1, 0.25, 1), so it's gone after 0.25 s.
+- The bar's own content view fades 0 to 1 over 0.5 s on the default curve. Only the content: fading the accessory view also fades the glass in from nothing (a black pill).
+- The card's own background (`UIDropShadowView`, opaque black in the app's dark appearance) is animated to clear on the card's spring. Without it a black pill sits over the bar after the card lands.
+- The artwork is the only thing that travels: its bounds shrink by about 210 pt on the card's spring, corner radius 10 to 5.5 in Music's bar (6 in ours), landing in the bar's artwork slot (Music: (16, 9, 30, 30) in the bar; NeoClub: (14, 8, 32, 32)). Our copy of the artwork lands exactly on the card's progress (at card progress 0.436 it is 145.3 pt; interpolating linearly predicts 145.3).
 
-**Fixed layout.** `NowPlayingPresentation` lays the player out at the window's size, pinned top-leading, in the named coordinate space `nowPlaying`. The artwork reports its frame there through `NowPlayingPresenter.artworkFrame`.
+**Fixed layout.** `NowPlayingPresentation` lays the player out at the window's size, pinned top-leading, in the named coordinate space `nowPlaying` (this is what lets the card clip it like Music's). The artwork reports its frame there through `NowPlayingPresenter.artworkFrame`.
 
-**Reopen gate.** `dismissing` and `wantsShow` stop a present from starting during a close. Doing that crashed UIKit.
+**Close state.** `dismissing`, `wantsShow` and `closeAnimationsStarted`. A present can't start during a close (that crashed UIKit); a tap on the bar during a landing is kept and presented when the close finishes. The transition coordinator's completion settles both outcomes (`closeFinished` or `closeCancelled`); `presentationControllerDidDismiss` is a backup, and `present()` clears a close whose controller is already off screen. A committed drag sets `showNowPlaying = false` at release, not at the end. DEBUG builds log every state change to `Library/Logs/signin-log.txt` (lines starting `NP`); `-debugCycleNowPlaying <hold> <count>` opens and closes it in a loop.
 
-**Interactive close bookkeeping.** The sheet delegate's `presentationControllerWillDismiss` starts the close, and `notifyWhenInteractionChanges` runs the stand-ins on release. `presentationControllerDidDismiss` sets `showNowPlaying = false`.
+**Interactive close bookkeeping.** The sheet delegate's `presentationControllerWillDismiss` starts the close, and `notifyWhenInteractionChanges` commits it on release.
 
 **History.**
 - First the system zoom, then `.overFullScreen` plus the zoom.
@@ -114,8 +115,7 @@ Without `sourceFrame`, the card slides off the bottom of the screen.
 3. **Release:** once the owner is happy, run `scripts/make-release.sh` and give them the printed values for their AltStore source entry.
 4. Smaller follow-ups:
    - Compare the open animation with Music again now that the presentation has changed.
-   - Music's grabber fades on its own keyframes; ours fades with the top stand-in.
-
+   
 ## Tooling and recipes
 
 **Devices.**
@@ -146,6 +146,8 @@ Without `sourceFrame`, the card slides off the bottom of the screen.
   - `frida -H 192.168.64.7 -n <Music|NeoClub> -q -t <secs> -l script.js < /dev/null`
   - Attach by process name; `frida-ps` fails without a TTY.
   - If it says "unable to connect", restart the server: `vphone-launchpad-cli guest rpc duo-lab services.load '{"paths":["/private/var/frida/re.frida.server.plist"]}'`.
+  - **Sampling geometry:** poll on a 10 ms timer, schedule onto the main queue once at a time (a flood of scheduled blocks hung Music's main thread and needed an app restart), find the *last* `UIDropShadowView` (there are two), and log each descendant's presentation-layer frame converted to window coordinates (`pl.convertRect_toLayer_(pl.bounds(), NULL)`). Normalise by the card's frame to see what is pinned, scaled or clipped.
+  - **macOS Local Network permission:** Frida reaches the VM over the host network (192.168.64.x). If the app hosting the session lacks Local Network permission, everything fails with "No route to host" while vphone's own channel (rpc, screenshots, input) still works. The owner has to enable it (System Settings, Privacy & Security, Local Network).
   - The Python venv with frida and numpy lived in the old session's scratchpad; recreate it with `python3 -m venv … && pip install frida-tools numpy`.
   - Useful hooks:
     - `-[CALayer addAnimation:forKey:]`: log the view class, key path, spring mass/stiffness/damping/velocity, from/to values and frame

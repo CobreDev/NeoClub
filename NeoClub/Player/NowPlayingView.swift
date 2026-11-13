@@ -67,6 +67,10 @@ struct NowPlayingView: View {
                 .contentShape(.rect)
         }
         .buttonStyle(.plain)
+        // Music's grabber, on a close: opacity keyframes 1, 0, 0 at 0, 0.5, 1 of 0.5 s on the default curve, so it's
+        // gone after a quarter second (traced with Frida), well before the rest of the player has faded.
+        .opacity(NowPlayingPresenter.shared.isClosing ? 0 : 1)
+        .animation(.timingCurve(0.25, 0.1, 0.25, 1, duration: 0.25), value: NowPlayingPresenter.shared.isClosing)
         .padding(.top, grabberTop(large: large))
         .accessibilityLabel("Close Now Playing")
     }
