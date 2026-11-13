@@ -23,6 +23,9 @@ final class NowPlayingPresenter: NSObject {
     private(set) var isPresented = false
     /// True while the close flies a copy of the artwork into the bar (the player's own artwork is hidden).
     private(set) var isClosing = false
+    /// True while a copy of the artwork flies between the bar and the player (open or close): the real artwork and
+    /// its shadow are hidden meanwhile.
+    private(set) var artworkFlying = false
     /// The mini player's own content (artwork, title, buttons) is hidden while the card lands and fades back in, as
     /// Music's bar content does (0 to 1 over 0.5 s). Only the SwiftUI content: fading the accessory's view itself
     /// also fades the bar's glass in from nothing, which showed as a black pill.
@@ -163,10 +166,66 @@ final class NowPlayingPresenter: NSObject {
         isClosing = false
         barContentHidden = false
         closeAnimationsStarted = false
+        artworkFlying = false
+        flyingArtwork?.removeFromSuperview()
+        flyingArtwork = nil
         openAnimator.source = accessoryView()?.convert(accessoryView()?.bounds ?? .zero, to: nil)
         presented = vc
         isPresented = true
+        let flies = prepareOpenArtwork()
         root.present(vc, animated: true)
+        if flies {
+            if let coordinator = vc.transitionCoordinator {
+                coordinator.animate(alongsideTransition: { [weak self] _ in self?.startOpenArtwork(vc) },
+                                    completion: { [weak self] _ in self?.finishOpenArtwork() })
+            } else {
+                artworkFlying = false  // no transition to fly in (it must never stay hidden)
+            }
+        }
+    }
+
+    // MARK: Open: the artwork grows out of the bar's artwork slot
+
+    /// Music's open mirrors its close (traced 2026-11-12): the card grows out of the bar, the player stays pinned to
+    /// its top-left and is only revealed, and the artwork grows from the bar's artwork slot to its place on the same
+    /// spring. The real artwork is hidden until its copy lands.
+    private func prepareOpenArtwork() -> Bool {
+        guard AudioPlayer.shared.artworkImage != nil, !artworkFrame.isEmpty, accessoryView() != nil else { return false }
+        artworkFlying = true
+        return true
+    }
+
+    private func startOpenArtwork(_ vc: UIViewController) {
+        guard let player = vc.view, let card = player.superview, let image = AudioPlayer.shared.artworkImage,
+              let barSize = accessoryView()?.bounds.size else { artworkFlying = false; return }
+        flyingArtwork?.removeFromSuperview()
+        // MiniPlayer: 32 pt artwork, 14 pt from the bar's leading edge, centred vertically. Created at this frame:
+        // `UIImageView(image:)` starts at the image's own size, and assigning the frame inside the transition's
+        // animation context would animate from that size (a 970 pt image flew in from the top-left).
+        let view = UIImageView(frame: CGRect(x: 14, y: (barSize.height - 32) / 2, width: 32, height: 32))
+        view.image = image
+        view.contentMode = .scaleAspectFill
+        view.clipsToBounds = true
+        view.layer.cornerCurve = .continuous
+        view.layer.cornerRadius = 6
+        UIView.performWithoutAnimation { card.addSubview(view); view.layoutIfNeeded() }
+        flyingArtwork = view
+        let end = card.convert(artworkFrame, from: player)
+        let fly = UIViewPropertyAnimator(duration: 0, timingParameters:
+            UISpringTimingParameters(mass: 1, stiffness: 333.3333, damping: 36.5148, initialVelocity: .zero))
+        fly.addAnimations {
+            view.frame = end
+            view.layer.cornerRadius = self.artworkCornerRadius
+        }
+        fly.startAnimation()
+    }
+
+    private func finishOpenArtwork() {
+        // Only if it opened: a close that started meanwhile owns the copy.
+        guard presented != nil, dismissing == nil else { return }
+        flyingArtwork?.removeFromSuperview()
+        flyingArtwork = nil
+        artworkFlying = false
     }
 
     private func dismiss() {
@@ -208,6 +267,7 @@ final class NowPlayingPresenter: NSObject {
         flyingArtwork?.removeFromSuperview()
         flyingArtwork = nil
         isClosing = false
+        artworkFlying = false
         if wantsShow { present() }
     }
 
@@ -262,9 +322,11 @@ final class NowPlayingPresenter: NSObject {
             view.layer.cornerRadius = artworkCornerRadius
             view.frame = card.convert(artRect, from: player)
             card.addSubview(view)
+            flyingArtwork?.removeFromSuperview()
             flyingArtwork = view
             art = view
             isClosing = true
+            artworkFlying = true
         }
 
         // The card's own background (the sheet's `UIDropShadowView`, opaque in the app's dark appearance) goes clear on
@@ -346,7 +408,25 @@ extension NowPlayingPresenter: UISheetPresentationControllerDelegate {
 extension NowPlayingPresenter: UIViewControllerTransitioningDelegate {
     func animationController(forPresented presented: UIViewController, presenting: UIViewController,
                              source: UIViewController) -> UIViewControllerAnimatedTransitioning? {
-        openAnimator
+        // Music's open (traced 2026-11-12): its `PalettePresentationAnimationController`, a subclass of UIKit's
+        // `_UISheetAnimationController`, with only `sourceFrame` set to the bar's frame in the window. Our own
+        // animator stays as the fallback if that class ever isn't there.
+        sheetAnimator(reversed: false) ?? openAnimator
+    }
+
+    /// UIKit's own sheet animation, landing in (or growing out of) the bar.
+    fileprivate func sheetAnimator(reversed: Bool) -> UIViewControllerAnimatedTransitioning? {
+        guard let cls = NSClassFromString("_UISheetAnimationController") as? NSObject.Type,
+              let bar = accessoryView() else { return nil }
+        let animator = cls.init()
+        guard animator.responds(to: NSSelectorFromString("setSourceFrame:")),
+              let transitioning = animator as? UIViewControllerAnimatedTransitioning else { return nil }
+        if reversed {
+            guard animator.responds(to: NSSelectorFromString("setIsReversed:")) else { return nil }
+            animator.setValue(true, forKey: "isReversed")
+        }
+        animator.setValue(NSValue(cgRect: bar.convert(bar.bounds, to: nil)), forKey: "sourceFrame")
+        return transitioning
     }
 
     /// The close: UIKit's own sheet animator, landing in the bar. Music's delegate returns its subclass of UIKit's
@@ -354,15 +434,7 @@ extension NowPlayingPresenter: UIViewControllerTransitioningDelegate {
     /// window (traced 2026-11-12); UIKit fills in the rest (the drag's frame, attachment point, property animator).
     /// Without a source frame the sheet slides off the bottom of the screen instead.
     func animationController(forDismissed dismissed: UIViewController) -> UIViewControllerAnimatedTransitioning? {
-        guard let cls = NSClassFromString("_UISheetAnimationController") as? NSObject.Type,
-              let bar = accessoryView() else { return nil }
-        let animator = cls.init()
-        guard animator.responds(to: NSSelectorFromString("setIsReversed:")),
-              animator.responds(to: NSSelectorFromString("setSourceFrame:")),
-              let transitioning = animator as? UIViewControllerAnimatedTransitioning else { return nil }
-        animator.setValue(true, forKey: "isReversed")
-        animator.setValue(NSValue(cgRect: bar.convert(bar.bounds, to: nil)), forKey: "sourceFrame")
-        return transitioning
+        sheetAnimator(reversed: true)
     }
 }
 

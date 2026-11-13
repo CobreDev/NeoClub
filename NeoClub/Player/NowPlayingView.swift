@@ -241,7 +241,7 @@ struct NowPlayingView: View {
             NowPlayingPresenter.shared.artworkFrame = frame
             NowPlayingPresenter.shared.artworkCornerRadius = cornerRadius
         }
-        .opacity(NowPlayingPresenter.shared.isClosing ? 0 : 1)
+        .opacity(NowPlayingPresenter.shared.artworkFlying ? 0 : 1)
     }
 
     private var bigArtwork: some View {
@@ -255,7 +255,7 @@ struct NowPlayingView: View {
                     .offset(y: 14)
                     .opacity(player.isPlaying ? 0.5 : 0.25)
                     // Gone with the artwork while a copy of it flies into the bar.
-                    .opacity(NowPlayingPresenter.shared.isClosing ? 0 : 1)
+                    .opacity(NowPlayingPresenter.shared.artworkFlying ? 0 : 1)
             }
             // Paused, Apple Music shrinks the artwork to ~73%. Fitted from a 60 fps recording of Music on the Duo:
             // playing, it grows on a bouncy spring (~11% overshoot) a beat after the button's glyph swaps;
