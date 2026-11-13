@@ -57,6 +57,14 @@ struct ScrubberBar: View {
 
 /// Thin system volume bar between speaker glyphs, like Apple Music.
 struct VolumeBar: View {
+    /// CarPlay (and other routes the phone can't set the volume of) hide MPVolumeView's slider, leaving only the
+    /// speaker glyphs. Music keeps the track there, dimmed and empty, so we draw that instead.
+    @State private var fixedVolume = VolumeBar.routeHasFixedVolume()
+
+    private static func routeHasFixedVolume() -> Bool {
+        AVAudioSession.sharedInstance().currentRoute.outputs.contains { $0.portType == .carAudio }
+    }
+
     var body: some View {
         HStack(spacing: 12) {
             Image(systemName: "speaker.fill").font(.system(size: 12)).opacity(0.6)
@@ -65,9 +73,16 @@ struct VolumeBar: View {
             Capsule().fill(.white.opacity(0.25)).frame(height: 7)
                 .overlay(alignment: .leading) { GeometryReader { g in Capsule().fill(.white.opacity(0.7)).frame(width: g.size.width * 0.6) } }
             #else
-            SystemVolume().frame(height: 20)
+            if fixedVolume {
+                Capsule().fill(.white.opacity(0.25)).frame(height: 7).frame(height: 20)
+            } else {
+                SystemVolume().frame(height: 20)
+            }
             #endif
             Image(systemName: "speaker.wave.3.fill").font(.system(size: 12)).opacity(0.6)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: AVAudioSession.routeChangeNotification)) { _ in
+            fixedVolume = Self.routeHasFixedVolume()
         }
     }
 
