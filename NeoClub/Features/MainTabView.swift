@@ -254,160 +254,45 @@ struct MiniPlayer: View {
     }
 }
 
-/// Now Playing as a full-screen presentation (the system zoom transition draws the card, its springs and the landing
-/// in the bar). Laid out edge to edge with the screen's insets passed in, as on the card.
+/// Now Playing as Apple Music presents it: a full-screen form sheet whose source is the mini player (see
+/// NowPlayingPresenter). The sheet's own drag closes it, and the close morphs the card into the bar's Liquid Glass.
+/// Laid out edge to edge with the screen's insets passed in, as on the card.
 ///
-/// Dragging down works like Apple Music rather than the system zoom's own drag (which shrinks the card under the
-/// finger): the card slides down at full size, 1:1 with the finger, and only morphs into the bar when it's let go.
-/// Music does this by moving the card's container (`UIDropShadowView`) during the drag and starting the landing from
-/// wherever it was released (traced 2026-11-12); this does the same with the presentation's container.
-///
-/// The drag is a UIKit pan on the presented controller's view, as in Music (its sheet's
-/// `_UISheetInteractionBackgroundDismissRecognizer`, a `UIPanGestureRecognizer` on the card container, traced
-/// 2026-11-12): it takes over from any button the finger started on (Music's grabber is a `UIControl` under it), so a
-/// drag works from anywhere on the card, the grabber and the top edge included. Like Music, the app doesn't defer the
-/// screen's top edge, so a swipe starting on the edge itself still opens Notification Center.
+/// While the card shrinks into the bar its views are resized to the bar's size; the player is laid out at the
+/// window's size and pinned to the card's top-left corner, so it's clipped by the shrinking card rather than
+/// squeezed into it (Music's content does the same, and fades out as it goes).
 struct NowPlayingPresentation: View {
     @Environment(AudioPlayer.self) private var player
-    @State private var card = PresentedCard()
-    /// The screen's insets, from the window: inside the growing card the view's own safe area is measured in its
-    /// scaled space and comes out huge, which pushed the player's contents off the card while it opened. Kept current
-    /// when the window changes (split view on the Duo, rotation): this view is built once and reused, so reading
-    /// them once left the margins of wherever the app was when it launched (e.g. the status bar column's space on the
-    /// right after moving to the left half).
-    @State private var insets = WindowInsetsProbe.current
+    /// The screen's insets and size, from the window: inside the growing card the view's own safe area is measured in
+    /// its scaled space and comes out huge, which pushed the player's contents off the card while it opened. Kept
+    /// current when the window changes (split view on the Duo, rotation): this view is built once and reused.
+    @State private var window = WindowInsetsProbe.current
+    /// The player's own coordinate space (its origin is the presented view's top-left).
+    static let space = "nowPlaying"
 
     var body: some View {
-        NowPlayingView(drawsBackground: false, insets: insets)
-            .padding(insets)
+        NowPlayingView(drawsBackground: false, insets: window.insets)
+            .padding(window.insets)
             // Edge to edge behind the padded player (there's no system safe area here for it to extend into).
             .background { NowPlayingBackdrop() }
+            .frame(width: window.size.width, height: window.size.height)
+            .coordinateSpace(.named(Self.space))
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             .ignoresSafeArea()
             // Kept built between opens: idle (no scrolling titles, no scrubber updates) while it's closed.
             .environment(\.isOnScreen, NowPlayingPresenter.shared.isPresented)
-            .background(WindowInsetsProbe { if $0 != insets { insets = $0 } })
-            .background(PresentedControllerReader { [player] vc in
-                card.attach(to: vc) { player.showNowPlaying = false }
-            })
-        // The system's drag-to-dismiss would shrink the card; the card's own pan replaces it.
-        .interactiveDismissDisabled()
+            .background(WindowInsetsProbe { if $0 != window { window = $0 } })
     }
 }
 
-/// The presented card's container view, moved directly during the drag (as Apple Music moves its `UIDropShadowView`).
-@MainActor
-final class PresentedCard: NSObject, UIGestureRecognizerDelegate {
-    weak var controller: UIViewController?
-    private var onDismiss: (() -> Void)?
-    private weak var pan: UIPanGestureRecognizer?
-    private(set) var dragging = false
-    private var restCenter: CGPoint?
-
-    /// Installs the drag on the controller's view (once).
-    func attach(to vc: UIViewController, onDismiss: @escaping () -> Void) {
-        controller = vc
-        self.onDismiss = onDismiss
-        guard pan?.view !== vc.view else { return }
-        let p = UIPanGestureRecognizer(target: self, action: #selector(handlePan(_:)))
-        p.delegate = self
-        p.maximumNumberOfTouches = 1
-        vc.view.addGestureRecognizer(p)
-        pan = p
-    }
-
-    @objc private func handlePan(_ p: UIPanGestureRecognizer) {
-        let ty = p.translation(in: p.view?.window).y
-        switch p.state {
-        case .began, .changed:
-            follow(max(0, ty))
-        case .ended:
-            guard dragging else { return }
-            if ty > 140 || p.velocity(in: p.view?.window).y > 500 {
-                // Hand over to the system dismissal from where the card is now: it lands in the bar from here.
-                release()
-                onDismiss?()
-            } else {
-                snapBack()
-            }
-        case .cancelled, .failed:
-            snapBack()
-        default: break
-        }
-    }
-
-    // Starts only on a downward, mostly vertical drag, like Music's sheet pan.
-    func gestureRecognizerShouldBegin(_ g: UIGestureRecognizer) -> Bool {
-        guard let p = g as? UIPanGestureRecognizer else { return true }
-        let v = p.velocity(in: p.view)
-        return v.y > 0 && v.y > abs(v.x)
-    }
-
-    /// Not from sliders, and not from a list that's scrolled down (it scrolls back up first, as in Music).
-    func gestureRecognizer(_ g: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
-        var v = touch.view
-        while let view = v, view !== g.view {
-            if view is UISlider { return false }
-            if let s = view as? UIScrollView, s.isScrollEnabled, s.alwaysBounceVertical || s.contentSize.height > s.bounds.height,
-               s.contentOffset.y > -s.adjustedContentInset.top + 0.5 { return false }
-            v = view.superview
-        }
-        return true
-    }
-
-    /// A list at its top waits for the card: dragging down there moves the card, not the list.
-    func gestureRecognizer(_ g: UIGestureRecognizer, shouldBeRequiredToFailBy other: UIGestureRecognizer) -> Bool {
-        other.view is UIScrollView && other is UIPanGestureRecognizer
-    }
-
-    /// The view the zoom transition animates: the presentation's outermost container under the transition view.
-    private var container: UIView? {
-        guard var v = controller?.view else { return nil }
-        while let s = v.superview, !(String(describing: type(of: s)).contains("TransitionView")), !(s is UIWindow) { v = s }
-        return v
-    }
-
-    /// Apple Music's card corner while it's dragged (traced: the card's corner radii are 14.16 pt at release, then
-    /// animate to the bar's 24 pt as it lands).
-    static let dragCornerRadius: CGFloat = 14.16
-
-    func follow(_ dy: CGFloat) {
-        guard let c = container else { return }
-        if !dragging {
-            dragging = true
-            restCenter = c.center
-            c.layer.cornerCurve = .continuous
-            c.layer.masksToBounds = true
-            UIView.animate(withDuration: 0.15) { c.layer.cornerRadius = Self.dragCornerRadius }
-        }
-        guard let rest = restCenter else { return }
-        c.center = CGPoint(x: rest.x, y: rest.y + dy)
-    }
-
-    /// Finger lifted to dismiss: leave the card where it is (the dismissal animates from its current frame).
-    func release() {
-        dragging = false
-        restCenter = nil
-    }
-
-/// Finger lifted without dismissing: back up on Apple Music's critically damped spring.
-    func snapBack() {
-        guard let c = container, let rest = restCenter else { dragging = false; return }
-        dragging = false
-        restCenter = nil
-        UIView.animate(springDuration: 0.3441, bounce: 0) {
-            c.center = rest
-            c.layer.cornerRadius = 0
-        }
-    }
-}
-
-/// Reports the window's safe-area insets whenever the window's layout changes.
+/// Reports the window's safe-area insets and size whenever the window's layout changes.
 private struct WindowInsetsProbe: UIViewRepresentable {
-    let changed: (EdgeInsets) -> Void
+    struct Metrics: Equatable { var insets: EdgeInsets; var size: CGSize }
+    let changed: (Metrics) -> Void
 
-    @MainActor static var current: EdgeInsets {
+    @MainActor static var current: Metrics {
         let w = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.flatMap(\.windows).first { $0.isKeyWindow }
-        return edge(w?.safeAreaInsets ?? .zero)
+        return Metrics(insets: edge(w?.safeAreaInsets ?? .zero), size: w?.bounds.size ?? .zero)
     }
 
     static func edge(_ i: UIEdgeInsets) -> EdgeInsets { EdgeInsets(top: i.top, leading: i.left, bottom: i.bottom, trailing: i.right) }
@@ -416,41 +301,16 @@ private struct WindowInsetsProbe: UIViewRepresentable {
     func updateUIView(_ view: Probe, context: Context) { view.changed = changed }
 
     final class Probe: UIView {
-        var changed: (EdgeInsets) -> Void
-        init(changed: @escaping (EdgeInsets) -> Void) { self.changed = changed; super.init(frame: .zero); isUserInteractionEnabled = false }
+        var changed: (Metrics) -> Void
+        init(changed: @escaping (Metrics) -> Void) { self.changed = changed; super.init(frame: .zero); isUserInteractionEnabled = false }
         required init?(coder: NSCoder) { fatalError() }
         private func report() {
             guard let w = window else { return }
-            let i = WindowInsetsProbe.edge(w.safeAreaInsets)
-            DispatchQueue.main.async { [changed] in changed(i) }
+            let m = Metrics(insets: WindowInsetsProbe.edge(w.safeAreaInsets), size: w.bounds.size)
+            DispatchQueue.main.async { [changed] in changed(m) }
         }
         override func didMoveToWindow() { super.didMoveToWindow(); report() }
         override func layoutSubviews() { super.layoutSubviews(); report() }
         override func safeAreaInsetsDidChange() { super.safeAreaInsetsDidChange(); report() }
-    }
-}
-
-/// Hands back the view controller that hosts this view (the presented Now Playing controller).
-private struct PresentedControllerReader: UIViewControllerRepresentable {
-    let found: (UIViewController) -> Void
-    func makeUIViewController(context: Context) -> Probe { Probe(found: found) }
-    func updateUIViewController(_ uiViewController: Probe, context: Context) {}
-
-    final class Probe: UIViewController {
-        let found: (UIViewController) -> Void
-        init(found: @escaping (UIViewController) -> Void) { self.found = found; super.init(nibName: nil, bundle: nil) }
-        required init?(coder: NSCoder) { fatalError() }
-        override func didMove(toParent parent: UIViewController?) {
-            super.didMove(toParent: parent)
-            var top: UIViewController? = parent
-            while let p = top?.parent { top = p }
-            if let top { found(top) }
-        }
-        override func viewDidAppear(_ animated: Bool) {
-            super.viewDidAppear(animated)
-            var top: UIViewController = self
-            while let p = top.parent { top = p }
-            found(top)
-        }
     }
 }
