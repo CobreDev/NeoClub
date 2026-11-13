@@ -49,7 +49,8 @@ struct NowPlayingView: View {
         }
         .foregroundStyle(.white)
         .background { if drawsBackground { NowPlayingBackdrop() } }
-        .animation(.spring(response: 0.45, dampingFraction: 0.9), value: halfFolded)
+        // Music's layout change on fold/unfold takes about a quarter second (device recording, 2026-11-13).
+        .animation(.spring(response: 0.3, dampingFraction: 0.88), value: halfFolded)
         .readsHinge($halfFolded)
         .presentationDragIndicator(.hidden)
         .presentationBackground(Color.aioNavy)
@@ -133,10 +134,10 @@ struct NowPlayingView: View {
             // differ between the VM and the phone (VM Music sat 1 to 3 pt lower than the phone's at the bottom row
             // and volume and 12 pt lower at the artwork, growing upward). NeoClub's is anchored to the screen's
             // edges, so only the phone's numbers are right for it.
-            ScrubberBar().padding(.top, large ? 18.5 : 11)
-            transport(narrow: narrow).padding(.top, large ? 12.9 : 1.9)
-            VolumeBar().padding(.top, large ? 31 : 22.3)
-            bottomBar.padding(.top, large ? 34.7 : 20.8)
+            ScrubberBar().matchedGeometryEffect(id: "scrubber", in: ns).padding(.top, large ? 18.5 : 11)
+            transport(narrow: narrow).matchedGeometryEffect(id: "transport", in: ns).padding(.top, large ? 12.9 : 1.9)
+            VolumeBar().matchedGeometryEffect(id: "volume", in: ns).padding(.top, large ? 31 : 22.3)
+            bottomBar.matchedGeometryEffect(id: "bottomBar", in: ns).padding(.top, large ? 34.7 : 20.8)
         }
     }
 
@@ -162,13 +163,13 @@ struct NowPlayingView: View {
             VStack(spacing: 0) {
                 if mode == .artwork { titleRow() } else { Color.clear.frame(height: 1) }
                 Spacer(minLength: 10)
-                ScrubberBar()
+                ScrubberBar().matchedGeometryEffect(id: "scrubber", in: ns)
                 Spacer(minLength: 10)
-                transport(narrow: false)
+                transport(narrow: false).matchedGeometryEffect(id: "transport", in: ns)
                 Spacer(minLength: 10)
-                VolumeBar()
+                VolumeBar().matchedGeometryEffect(id: "volume", in: ns)
                 Spacer(minLength: 10)
-                bottomBar.padding(.bottom, 6)
+                bottomBar.matchedGeometryEffect(id: "bottomBar", in: ns).padding(.bottom, 6)
             }
             .padding(.top, 24)
             .frame(height: half)
@@ -418,13 +419,37 @@ struct NowPlayingView: View {
 
 private extension View {
     /// Tracks whether a foldable iPhone (iPhone Duo) is half-folded, via `onHingeChange` (iOS 27.1+).
-    @ViewBuilder func readsHinge(_ halfFolded: Binding<Bool>) -> some View {
+    func readsHinge(_ halfFolded: Binding<Bool>) -> some View { modifier(HingeReader(halfFolded: halfFolded)) }
+}
+
+/// Half-folded is reported when the fold *finishes* (about half a second after it starts), not when it begins: while the
+/// system's dark crease and blur sweep over the lower half the layout holds still, and it changes underneath them, as
+/// in Music (device recording, 2026-11-13: Music's artwork starts shrinking about 0.5 s after the dark begins; ours
+/// shrank at once, in plain view). Unfolding is reported at once.
+private struct HingeReader: ViewModifier {
+    @Binding var halfFolded: Bool
+    @State private var pendingFold: Task<Void, Never>?
+
+    @ViewBuilder func body(content: Content) -> some View {
         if #available(iOS 27.1, *) {
-            onHingeChange { _, context in
-                halfFolded.wrappedValue = context.hinge?.status == .partiallyOpen
+            content.onHingeChange { _, context in
+                if context.hinge?.status == .partiallyOpen {
+                    // The timer starts on the first report only: the hinge keeps reporting as it moves.
+                    guard !halfFolded, pendingFold == nil else { return }
+                    pendingFold = Task {
+                        try? await Task.sleep(for: .milliseconds(500))
+                        guard !Task.isCancelled else { return }
+                        halfFolded = true
+                        pendingFold = nil
+                    }
+                } else {
+                    pendingFold?.cancel()
+                    pendingFold = nil
+                    halfFolded = false
+                }
             }
         } else {
-            self
+            content
         }
     }
 }

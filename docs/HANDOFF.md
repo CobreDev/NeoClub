@@ -135,6 +135,13 @@ The owner took the same states on the Duo in Music and NeoClub (outer, inner por
 
 After the changes every pair matched within about 1 pt (scrubber and volume tracks within 0.5 pt). Not compared: Info versus Lyrics panels (different content), laptop posture. Rows were compared with a real queue (56 pt pitch, 48 pt artwork on both).
 
+### Fold / unfold between portrait and laptop posture (2026-11-13)
+
+From the owner's side-by-side recording of NeoClub and Music on the inner screen:
+- **Unfold.** NeoClub used to swap `portraitLayout` for `laptopLayout`, so the controls cross-faded at two different positions (two sets of transport buttons visible at once). Music slides one set of controls into place while the artwork grows, about a quarter second. Now the scrubber, transport, volume and bottom row carry `matchedGeometryEffect` ids (`scrubber`, `transport`, `volume`, `bottomBar`) in both layouts, next to the existing `artwork`/`titles`/`actions` ids, so they glide; the layout spring is `response 0.3, damping 0.88`.
+- **Fold.** The system sweeps a dark, blurred crease over the lower half. Music keeps its layout still under that sweep and shrinks the artwork about 0.5 s after it starts (hidden), so the controls reappear already in place. NeoClub used to relayout the moment the hinge reported, in plain view. `HingeReader` (bottom of `NowPlayingView.swift`) now reports half-folded 500 ms after the *first* `.partiallyOpen` report (the hinge keeps reporting while it moves; restarting the timer on each report made the shrink late) and reports unfolding at once.
+- Checked in the VM with `display.posture` `partially-open` / `open` (hinge values: ambiguous, closed, open, open-flat, partially-open) and burst screenshots (`fold.py`-style capture). Confirmed on the phone: pending.
+
 ## Open items / next steps
 
 1. **Release.** Run `scripts/make-release.sh` from a clean tree and give the owner the printed values for their AltStore source (they host it). They test the *Release* build once on the Duo first: tap, drag and flick closes, reopen after a flick, a flick right after opening, sign-in surviving a relaunch (and the app opening on Home), playback on Whit's Flop only, lock-screen controls, downloads, all three screen layouts.
