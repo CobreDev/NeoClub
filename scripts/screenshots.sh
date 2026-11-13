@@ -6,7 +6,7 @@
 #   scripts/screenshots.sh
 #
 # Needs the simulator to be signed in once (open it in DeviceHub, tap Sign In, pick the profile yourself; the
-# sign-in persists in the simulator). Writes screenshots/1-home.png ... 5-episode.png at 1206x2622.
+# sign-in persists in the simulator). Writes screenshots/1-home.png ... 5-now-playing.png at 1206x2622.
 set -euo pipefail
 cd "${0:A:h}/.."
 
@@ -34,7 +34,7 @@ shot() {   # name, screen, seconds to wait
 shot 1-home        home       14
 shot 2-browse      browse     16
 shot 3-album       album      18
-shot 4-now-playing nowplaying 20
-shot 5-episode      episode    18
+shot 4-episode      episode    18
+shot 5-now-playing nowplaying 20
 
 xcrun simctl status_bar "$UDID" clear
