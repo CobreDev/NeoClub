@@ -45,10 +45,13 @@ enum AIOService {
             "player": "true", "recommendations": "true", "tag": "false",
             "series": "false", "parent": "false", "content_grouping_id": groupingID,
         ])
-        // An album that isn't fully out yet can leave its episodes without an album name ("#83: Phase One"): borrow it
-        // from an episode alongside it, else from the album the episode was opened from.
+        // An album that isn't fully out yet can leave its episodes without an album name ("#83: Phase One"). The
+        // library knows which album every episode is in, wherever it was started from; failing that, an episode
+        // alongside it, or the album it was opened from.
         if episode.albumTitle == nil {
-            if let sibling = episode.inAlbum?.lazy.compactMap(\.albumTitle).first {
+            if let name = await AlbumIndex.shared.albumName(for: episode.id) {
+                episode.albumName = name
+            } else if let sibling = episode.inAlbum?.lazy.compactMap(\.albumTitle).first {
                 episode.albumName = sibling
             } else if let groupingID, let album = (try? await grouping(groupingID)) ?? nil, album.type == "Album" {
                 episode.albumName = album.name
@@ -171,5 +174,54 @@ enum AIOService {
     static func saveProgress(episodeID: String, status: String, positionMs: Int) async throws {
         _ = try await api.raw("PUT", "/content",
                               body: try JSONEncoder().encode(ProgressUpdate(content_id: episodeID, status: status, current_progress: positionMs)))
+    }
+}
+
+/// Which album each episode is in, read from the album pages (the same requests the Albums grid and Next Up make, so
+/// they're normally already saved on this device). Album names don't change, so a saved page is used whatever its age.
+actor AlbumIndex {
+    static let shared = AlbumIndex()
+    private var names: [String: String] = [:]
+    /// When the index was last built from the network (nil: only from saved pages, or not at all).
+    private var fetchedAt: Date?
+    private var builtFromSaved = false
+    private static let pageSize = 25
+
+    func albumName(for episodeID: String) async -> String? {
+        if let name = names[episodeID] { return name }
+        if !builtFromSaved && names.isEmpty { await build(fresh: false) }
+        if let name = names[episodeID] { return name }
+        // Not in what's saved (or in what was fetched a while ago): a newly published album may be missing.
+        if let fetchedAt, fetchedAt.timeIntervalSinceNow > -300 { return nil }
+        await build(fresh: true)
+        return names[episodeID]
+    }
+
+    /// From the saved pages when all are there (`fresh` false), else from the network.
+    private func build(fresh: Bool) async {
+        var found: [String: String] = [:]
+        var page = 1, pages = 1
+        var allSaved = !fresh
+        repeat {
+            let list: GroupingsResponse?
+            if !fresh, let saved = AIOService.cachedGroupings(type: "Album", page: page, pageSize: Self.pageSize) {
+                list = saved.value
+            } else if !fresh {
+                return
+            } else {
+                list = try? await AIOService.groupings(type: "Album", page: page, pageSize: Self.pageSize)
+                allSaved = false
+            }
+            guard let list else { return }
+            for g in list.contentGroupings ?? [] {
+                guard let name = g.name else { continue }
+                for e in g.contentList where found[e.id] == nil { found[e.id] = name }
+            }
+            pages = list.metadata?.totalPageCount ?? page
+            page += 1
+        } while page <= pages && page <= 10
+        names = found
+        builtFromSaved = allSaved
+        if fresh { fetchedAt = Date() }
     }
 }
