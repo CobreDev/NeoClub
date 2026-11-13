@@ -45,11 +45,13 @@ struct ScrubberBar: View {
         let fraction = touch.map { min(1, max(0, $0.start + ($0.moving ? Double($0.dx / (barWidth * Self.pressedScale)) : 0))) } ?? resting
         VStack(spacing: 5.8) {
             GeometryReader { g in
+                // The played part's right edge is straight (Music clips a plain rectangle to the rounded track).
                 ZStack(alignment: .leading) {
-                    Capsule().fill(.white.opacity(0.25))
-                    Capsule().fill(.white.opacity(pressed ? 1 : 0.7))
+                    Color.white.opacity(0.25)
+                    Rectangle().fill(.white.opacity(pressed ? 1 : 0.7))
                         .frame(width: max(0, g.size.width * fraction))
                 }
+                .clipShape(.capsule)
                 .frame(height: pressed ? 16 : 7)
                 .frame(maxHeight: .infinity)
                 .contentShape(.rect)
@@ -106,7 +108,7 @@ struct VolumeBar: View {
             #if targetEnvironment(simulator)
             // The simulator has no system volume control; show the track so layout matches a device.
             stand(in: Capsule().fill(.white.opacity(0.25)).frame(height: 7)
-                .overlay(alignment: .leading) { GeometryReader { g in Capsule().fill(.white.opacity(0.7)).frame(width: g.size.width * 0.6) } })
+                .overlay(alignment: .leading) { GeometryReader { g in Rectangle().fill(.white.opacity(0.7)).frame(width: g.size.width * 0.6) } }.clipShape(.capsule))
             #else
             if fixedVolume {
                 stand(in: Capsule().fill(.white.opacity(0.25)).frame(height: 7).frame(height: 20))
