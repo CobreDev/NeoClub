@@ -35,6 +35,12 @@ Non-obvious things learned building NeoClub, grouped by area. The long write-ups
 - The podcast logo is itself a bright green, so a minty Podcasts tile blended into it. Podcasts is a deep forest green and Series is blue.
 - API image URLs contain spaces and apostrophes (`content grouping/connie's_conversion…`). `URL(string:)` percent-encodes them on iOS 17+, they download fine, and the CDN serves them as `binary/octet-stream`, which ImageIO decodes anyway.
 
+## App icon
+
+- Icon Composer `.icon` documents can be written by hand (`icon.json` plus `Assets/*.png`; layers are `glass: true/false`, groups are front to back) and rendered without the app by Icon Composer's `ictool`, which also shows exactly how iOS 27 will draw them. `/usr/bin/ictool` is an `xcrun` shim for `actool`'s icon compiler and doesn't have `--export-image`; use the binary inside `Icon Composer.app/Contents/Executables`.
+- Alternate icons work with `.icon` files: list their names in `ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES` and the built `Info.plist` gets `CFBundleAlternateIcons`. An icon can't be previewed in-app by name, so ship rendered thumbnails.
+- The wordmark's 'Club' and arc are separate connected components in the alpha channel, which is how the two-colour variants split it into layers.
+
 ## Unexplained
 
 - The Series and Podcasts category tiles were blank for one launch while Collections and Books showed covers. The images were reachable, cached on the phone, and the cached responses decoded fine with the app's own models, so data, URLs and decoding were ruled out. They appeared on a later launch. If it recurs, look at `BrowseStore.load()` (it loads once per process behind a `loaded` flag and its work is cancelled when the view's task is cancelled) and at what the first launch after an install can fetch.

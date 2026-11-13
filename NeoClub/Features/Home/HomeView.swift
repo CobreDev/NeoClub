@@ -8,6 +8,7 @@ struct HomeView: View {
     @State private var home: HomeResponse?
     @State private var error: String?
     @State private var showAccount = false
+    @State private var showIconPicker = false
 
     var body: some View {
         ScrollView {
@@ -41,13 +42,19 @@ struct HomeView: View {
         .navigationTitle("Home")
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
-                Button { showAccount = true } label: {
+                // Tap: Account. Hold: the app icon picker.
+                Menu {
+                    Button { showIconPicker = true } label: { Label("App Icon", systemImage: "app.badge") }
+                } label: {
                     if let profile = app.profile {
                         ProfileBadge(profile: profile, size: 36, showsName: false)
                             .padding(4)
                             .glassEffect(.regular.interactive(), in: .circle)
                     }
+                } primaryAction: {
+                    showAccount = true
                 }
+                .menuStyle(.button)
                 .buttonStyle(.plain)
                 .accessibilityLabel("Account")
             }
@@ -55,6 +62,7 @@ struct HomeView: View {
             .sharedBackgroundVisibility(.hidden)
         }
         .sheet(isPresented: $showAccount) { AccountView() }
+        .sheet(isPresented: $showIconPicker) { AppIconPicker() }
         .refreshable { await load(force: true) }
         .task { if home == nil { await load() } }
     }

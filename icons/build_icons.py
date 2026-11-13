@@ -1,5 +1,5 @@
 """Generates the Liquid Glass app icon variants (Icon Composer .icon documents) from the white club wordmark.
-Usage: python3 build_icons.py <out-dir>   (needs Pillow). Render previews with Icon Composer's ictool."""
+Usage: python3 icons/build_icons.py NeoClub/Resources/AppIcons   (needs Pillow). Render previews with Icon Composer's ictool."""
 import json,os,math,sys,collections
 from PIL import Image, ImageDraw, ImageFilter
 S=1024
@@ -45,7 +45,7 @@ def logo_layer(mask,color,width,path):
     h=int(mask.height*width/mask.width); m=mask.resize((width,h),Image.LANCZOS)
     s=Image.new('RGBA',(width,h),color+(255,)); s.putalpha(m)
     c=Image.new('RGBA',(S,S),(0,0,0,0)); c.alpha_composite(s,((S-width)//2,(S-h)//2)); c.save(path)
-def hex_layer(path,r,color):
+def _unused_hex_layer(path,r,color):
     m=Image.new('L',(S*2,S*2),0); ImageDraw.Draw(m).polygon(hexagon(S,S,r*2,rot=0),fill=255)
     m=m.filter(ImageFilter.GaussianBlur(40)).point(lambda v:255 if v>128 else 0).filter(ImageFilter.GaussianBlur(1.5)).resize((S,S),Image.LANCZOS)
     s=Image.new('RGBA',(S,S),color+(255,)); s.putalpha(m); s.save(path)
@@ -64,15 +64,11 @@ def make(out,name,bg,main_col,accent_col,line,fill):
 out=sys.argv[1]; os.makedirs(out,exist_ok=True)
 GOLD=((0xFF,0xD0,0x55),(0xF2,0xB2,0x3E),(0xE0,0x96,0x28)); BLUE=((0x2F,0x9B,0xE0),(0x00,0x5E,0x9A),(0x14,0x2A,0x66))
 YF="extended-srgb:0.94000,0.70000,0.27000,1.00000"; BF="extended-srgb:0.00000,0.36900,0.60400,1.00000"
-make(out,'AppIcon-yellow',GOLD,(0x00,0x5F,0x8C),(0x12,0x16,0x1E),(255,255,255,58),YF)            # the original's colours
-make(out,'AppIcon-yellow-white',GOLD,(255,255,255),(0x1C,0x38,0x72),(255,255,255,70),YF)       # white wordmark, navy Club
-make(out,'AppIcon-blue',BLUE,(255,255,255),(0xF9,0xD5,0x48),(255,255,255,34),BF)               # white wordmark, yellow Club
-# blue, white wordmark only
-d=os.path.join(out,'AppIcon-blue-white.icon'); os.makedirs(d+'/Assets',exist_ok=True)
+make(out,'AppIconGold',GOLD,(0x00,0x5F,0x8C),(0x12,0x16,0x1E),(255,255,255,58),YF)            # the original's colours
+make(out,'AppIconGoldWhite',GOLD,(255,255,255),(0x1C,0x38,0x72),(255,255,255,70),YF)       # white wordmark, navy Club
+make(out,'AppIconBlueGold',BLUE,(255,255,255),(0xF9,0xD5,0x48),(255,255,255,34),BF)           # white wordmark, yellow Club
+# blue, white wordmark only (no accent layer)
+d=os.path.join(out,'AppIconBlue.icon'); os.makedirs(d+'/Assets',exist_ok=True)
 background(d+'/Assets/bg.png',*BLUE,(255,255,255,34)); full=Image.merge('L',(Image.eval(MAIN,lambda v:v),)) if False else None
 whole=Image.new('L',LOGO.size); whole.paste(LOGO.split()[3]); logo_layer(whole,(255,255,255),LW,d+'/Assets/logo.png')
-write(out,'AppIcon-blue-white',[grp([lay('logo.png','Wordmark')],'Wordmark',0.6),grp([lay('bg.png','background',False)],'Background',0)],BF)
-# blue, yellow hexagon badge with a navy wordmark (smaller: it has to fit inside the hexagon)
-d=os.path.join(out,'AppIcon-blue-hexagon.icon'); os.makedirs(d+'/Assets',exist_ok=True)
-background(d+'/Assets/bg.png',*BLUE,(255,255,255,34)); hex_layer(d+'/Assets/hex.png',440,(0xF9,0xD5,0x48)); logo_layer(whole,(0x14,0x2A,0x66),660,d+'/Assets/logo.png')
-write(out,'AppIcon-blue-hexagon',[grp([lay('logo.png','Wordmark',False)],'Wordmark',0.4),grp([lay('hex.png','Hexagon')],'Hexagon',0.6,0.35),grp([lay('bg.png','background',False)],'Background',0)],BF)
+write(out,'AppIconBlue',[grp([lay('logo.png','Wordmark')],'Wordmark',0.6),grp([lay('bg.png','background',False)],'Background',0)],BF)
