@@ -27,7 +27,7 @@ Copy the mechanism Music actually uses (often a private UIKit setting) rather th
   - outer and inner Duo layouts, including laptop posture and split view
 - 13 unit tests in `NeoClubTests` pass.
 - **Now Playing animations are signed off by the owner** (open, tap close, drag close, flick close, reopen), and the layout was matched to the owner's device screenshots of Music on 2026-11-13 (see [docs/layout-vs-music.md](docs/layout-vs-music.md)).
-- **Release prep (2026-11-13):** all debug code is removed from the app (launch arguments, the NP state log, the API log, the sign-in log, the placeholder UI-only mode, the Debug menu and API Explorer, the 10-second sleep timer). The two switches the Debug menu held that are real settings, *Sync Listening Progress* and *Show Downloads in Files*, are now in Account.
+- **Release prep (2026-11-13):** all debug code is removed from the app (launch arguments, the NP state log, the API log, the sign-in log, the placeholder UI-only mode, the Debug menu and API Explorer, the 10-second sleep timer). The two switches the Debug menu held that are real settings, *Sync Listening Progress* and *Show Downloads in Files*, are in a debug menu on a hold of the Home profile picture (`DebugMenu`, kept in release builds), not in Account.
 - **Launch behaviour:** the app opens on Home after a fresh launch. The tab and pages are remembered only for the life of the process (`SceneMemory` in `MainTabView`), so unfolding the Duo (which recreates the window) keeps your place, but quitting and relaunching does not. (It used to restore the last pages from `@SceneStorage`, rebuilding an album from a bare ID, which showed a black rectangle where its header should be.) The mini player still brings back the last episode, paused.
 
 ## Working rules (the owner's instructions)
@@ -58,7 +58,7 @@ Copy the mechanism Music actually uses (often a private UIKit setting) rather th
 | Playback, queue, sync | `NeoClub/Player/AudioPlayer.swift` (`addedCount` = Music's "Playing Next"; `queueNext`, `queueLast`), `ProgressSync.swift` (`isEnabled`; always false under `FORCE_NO_SYNC`) |
 | Theme and fonts | `NeoClub/App/Theme.swift` (`Font.univers`, `universBold`, `jacoby` scale with the text style nearest each size) |
 | Row swipes, context menus | `NeoClub/Features/Components.swift` (`.episodeSwipeActions`) |
-| Account | `NeoClub/Features/Profiles/AccountView.swift`: profile, switch profile, *Sync Listening Progress*, *Show Downloads in Files*, sign out, version footer (`NeoClub/App/AppVersion.swift`) |
+| Account | `NeoClub/Features/Profiles/AccountView.swift`: profile, switch profile, sign out, version footer (`NeoClub/App/AppVersion.swift`); also `DebugMenu` (*Sync Listening Progress*, *Show Downloads in Files*), shown on a hold of the Home profile picture |
 | Launch state | `MainTabView.SceneMemory`: tab and navigation paths kept in memory for the process only |
 | Research notes | `docs/original-app-analysis.md` (the original app's API notes, Music's Now Playing traces) |
 | Release | `scripts/make-release.sh` (needs a clean, committed tree) builds `dist/NeoClub-<version>-<build>.ipa`, tags `build-<build>`, and prints the version, build, date, size and minimum OS for the owner's existing AltStore source. **Don't generate a source.json**: the owner already has a source. |

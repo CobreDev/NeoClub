@@ -1,13 +1,11 @@
 import SwiftUI
 
-/// Account sheet opened from the Home profile button: profile, settings, sign out.
+/// Account sheet opened from the Home profile button: profile, switching profiles, sign out. (The developer switches
+/// are in `DebugMenu`, on a hold of that button.)
 struct AccountView: View {
     @Environment(AppModel.self) private var app
     @Environment(\.dismiss) private var dismiss
-    @Environment(DownloadStore.self) private var downloads
     @State private var confirmSignOut = false
-    @State private var syncProgress = ProgressSync.isEnabled
-    @State private var exportDownloads = DownloadStore.exportsToFiles
 
     var body: some View {
         NavigationStack {
@@ -33,18 +31,6 @@ struct AccountView: View {
                     }
                 }
                 Section {
-                    Toggle(isOn: $syncProgress) {
-                        Label("Sync Listening Progress", systemImage: "arrow.triangle.2.circlepath")
-                    }
-                    .onChange(of: syncProgress) { _, on in ProgressSync.isEnabled = on }
-                    .aioRow()
-                    Toggle(isOn: $exportDownloads) {
-                        Label("Show Downloads in Files", systemImage: "folder")
-                    }
-                    .onChange(of: exportDownloads) { _, on in downloads.setExportsToFiles(on) }
-                    .aioRow()
-                }
-                Section {
                     Button("Sign Out", role: .destructive) { confirmSignOut = true }.aioRow()
                 } footer: {
                     Text("AIO Club \(AppVersion.display)")
@@ -65,6 +51,26 @@ struct AccountView: View {
                     Task { await app.signOut() }
                 }
             }
+        }
+    }
+}
+
+/// The developer switches, in the menu that opens when the Home profile button is held. Kept in release builds.
+struct DebugMenu: View {
+    @Environment(DownloadStore.self) private var downloads
+    @State private var syncProgress = ProgressSync.isEnabled
+    @State private var exportDownloads = DownloadStore.exportsToFiles
+
+    var body: some View {
+        Section("Debug") {
+            Toggle(isOn: $syncProgress) {
+                Label("Sync Listening Progress", systemImage: "arrow.triangle.2.circlepath")
+            }
+            .onChange(of: syncProgress) { _, on in ProgressSync.isEnabled = on }
+            Toggle(isOn: $exportDownloads) {
+                Label("Show Downloads in Files", systemImage: "folder")
+            }
+            .onChange(of: exportDownloads) { _, on in downloads.setExportsToFiles(on) }
         }
     }
 }

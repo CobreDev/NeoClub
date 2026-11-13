@@ -59,6 +59,7 @@ struct HomeView: View {
                     }
                 }
                 .buttonStyle(.plain)
+                .contextMenu { DebugMenu() }
                 .accessibilityLabel("Account")
             }
             // Drop the toolbar's shared capsule so the button is a circle matching the avatar.
