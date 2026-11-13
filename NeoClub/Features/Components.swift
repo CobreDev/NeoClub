@@ -367,6 +367,15 @@ struct MarqueeText: View {
     /// When the current cycle began; the position is computed from it, so restarting is just a reset.
     @State private var start = Date()
 
+    /// The screenshot demo shows long titles at rest, not caught mid-scroll.
+    private static var staticForDemo: Bool {
+        #if SCREENSHOT_DEMO
+        return true
+        #else
+        return false
+        #endif
+    }
+
     private var overflows: Bool { fullWidth > boxWidth + 0.5 }
 
     var body: some View {
@@ -381,7 +390,7 @@ struct MarqueeText: View {
             }
             .overlay(alignment: .leading) {
                 let distance = fullWidth + gap
-                if isOnScreen {
+                if isOnScreen && !Self.staticForDemo {
                     scrolling(distance: distance)
                 } else {
                     Text(text).font(font).fixedSize()

@@ -82,7 +82,7 @@ Releases: `scripts/make-release.sh` (see [docs/release.md](docs/release.md)). De
 | [docs/layout-vs-music.md](docs/layout-vs-music.md) | What the VM can and can't tell you about layout, the device calibration against Music, the constants now in the code |
 | [docs/findings.md](docs/findings.md) | Non-obvious findings and pitfalls from the whole project (UIKit, SwiftUI, data, process), and what is still unexplained |
 | [docs/release.md](docs/release.md) | Date build numbers, tags, `make-release.sh`, the release checklist, the AltStore values |
-| [docs/tooling.md](docs/tooling.md) | Devices, simulator, vphone VM, Frida recipes, measuring recordings and screenshots, the removed debug tools |
+| [docs/tooling.md](docs/tooling.md) | Devices, simulator, vphone VM, Frida recipes, measuring recordings and screenshots, the removed debug tools, and the screenshot demo mode (`scripts/screenshots.sh`) |
 | [docs/original-app-analysis.md](docs/original-app-analysis.md) | The original app's API and structure, and Music's Now Playing presentation trace |
 
 ## App icons (branch `icon-glass`)

@@ -54,3 +54,16 @@ Everything that was `#if DEBUG` or launch-argument driven is gone from the app s
 - `NowPlayingPresenter.trace` (state machine log to `Library/Logs/signin-log.txt`), `SignInLog`, `DebugAPILog` (raw responses in `Library/Logs/api-log`)
 - the Debug menu (hold the profile picture on Home) and API Explorer
 - `-DFORCE_UI_ONLY` for VM builds with no account (`-DFORCE_NO_SYNC` stays in `main`)
+
+## Screenshot demo mode (kept on `main`, compiled only with `-DSCREENSHOT_DEMO`)
+
+For the AltStore listing screenshots, on the iPhone 18 Pro simulator, from a signed-in account without showing anything personal. `scripts/screenshots.sh` builds with the flag, sets the status bar to 9:41 (full battery and signal), launches the app once per screen with `-demoScreen <name>` and saves `screenshots/1-home.png` to `5-now-playing.png` (1206x2622). The code is `NeoClub/App/DemoMode.swift` plus small `#if SCREENSHOT_DEMO` blocks (HomeView, MainTabView's `runDemo`, NowPlayingView's initial mode, AudioPlayer, ProgressSync, MarqueeText); a normal build or release compiles none of it.
+
+- **Sign in once yourself.** Open the simulator in DeviceHub (Xcode 27 has no Simulator.app), tap Sign In and pick the profile. I never type the password or PIN. The sign-in persists in the simulator. `SIM_UDID` overrides the simulator (default: the iPhone 18 Pro, iOS 27.2).
+- **No progress anywhere.** `AudioPlayer.progress(for:)` returns nil (no "min left" bars, no played checkmarks), `ProgressSync.isEnabled` is always false (nothing is written to the account), and Home is `DemoHome`: New Albums and Latest Episodes only (no promo carousel, Continue Listening, Next Up, bookmarks, or "Check out more content about ..." recommendations, which come from listening history).
+- **Whit's Flop.** The player loads #001 Whit's Flop (`a354W0000046TjUQAU`) with the rest of its album queued, paused at 0:42. The album is found by reading the album list (read-only).
+- **Screens:** `home`, `browse`, `album`, `episode`, `nowplaying`, `upnext`, `info`. The listing uses home, browse, album, episode, nowplaying (in that order).
+- Long titles are shown at rest (`MarqueeText` doesn't scroll in the demo) so a screenshot is never caught mid-scroll.
+- The simulator has no Simulator.app here: `xcrun simctl` (boot, install, launch, `io screenshot`, `status_bar`) does everything.
+
+The AltStore `screenshots` URLs are `https://raw.githubusercontent.com/CobreDev/NeoClub/main/screenshots/<file>` (the repo is public).

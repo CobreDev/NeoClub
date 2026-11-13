@@ -170,11 +170,15 @@ final class AudioPlayer {
     var progressFraction: Double { duration > 0 ? position / duration : 0 }
 
     func progress(for item: Episode) -> ListenProgress? {
+        #if SCREENSHOT_DEMO
+        return nil  // the screenshot demo shows no progress at all
+        #else
         if let override = progressOverrides[item.id] { return override }
         if finishedHere.contains(item.id), !(item.progress?.isComplete ?? false) {
             return ListenProgress(status: "Complete", currentProgress: item.mediaLength)
         }
         return item.progress
+        #endif
     }
 
     /// Clears an episode's progress so it reads as new again (status "New" at 0). Only syncs when progress sync is on.

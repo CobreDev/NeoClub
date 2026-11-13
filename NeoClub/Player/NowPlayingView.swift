@@ -15,13 +15,21 @@ struct NowPlayingView: View {
     /// The screen's safe-area insets (the card pads the player by them). Used to place things relative to the
     /// screen's edges the way Apple Music does: the grabber, the side margins and the bottom row.
     var insets = EdgeInsets()
-    @State private var mode: Mode = .artwork
+    @State private var mode: Mode = NowPlayingView.initialMode
     @State private var halfFolded = false
     /// Shared between the big artwork/title and the small header, so switching to Up Next moves the same artwork
     /// and title into place (Apple Music) instead of cross-fading two copies.
     @Namespace private var ns
 
     enum Mode { case artwork, info, queue }
+
+    private static var initialMode: Mode {
+        #if SCREENSHOT_DEMO
+        return Demo.screen == "upnext" ? .queue : Demo.screen == "info" ? .info : .artwork
+        #else
+        return .artwork
+        #endif
+    }
 
     /// Apple Music's switch between the player and Up Next, measured frame by frame on iOS 27.2: the artwork and
     /// column move on a critically damped spring with a ~0.33 s response, starting at the tap.
@@ -88,6 +96,10 @@ struct NowPlayingView: View {
         let trail = narrow ? max(0, 32 - insets.trailing) : 28
         let content = min(size.width - lead - trail, 513)
         let large = size.height > 800
+        // A regular iPhone (440 pt wide or less; the Duo's outer screen is 466) has its status bar across the top, so
+        // Up Next's header starts under it. The Duo's measured 32 pt is from the screen's edge, where its status bar
+        // is off to the side.
+        let regularPhone = size.width < 450
         // Laid out from the screen's top edge, as Music is (it ignores the inner screen's ~89 pt top inset); the
         // grabber floats over the top instead of taking room, so the header and artwork are placed from the edge.
         return VStack(spacing: 0) {
@@ -103,7 +115,7 @@ struct NowPlayingView: View {
                 } else {
                     // Music's Up Next header artwork: 32 pt from the screen's top on both screens (owner's device screenshots,
                     // 2026-11-13).
-                    compactHeader.padding(.top, 32)
+                    compactHeader.padding(.top, regularPhone ? insets.top + 6 : 32)
                     if narrow { modeCapsules.padding(.top, 8.4) }
                     panel.padding(.top, narrow ? 13.4 : 16)
                 }
