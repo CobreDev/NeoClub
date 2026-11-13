@@ -61,14 +61,51 @@ def make(out,name,bg,main_col,accent_col,line,fill):
     background(d+'/Assets/bg.png',*bg,line); logo_layer(MAIN,main_col,LW,d+'/Assets/logo.png'); logo_layer(ACCENT,accent_col,LW,d+'/Assets/club.png')
     write(out,name,[grp([lay('club.png','Club')],'Club',0.5),grp([lay('logo.png','Wordmark')],'Wordmark',0.5),grp([lay('bg.png','background',False)],'Background',0)],fill)
 
-out=sys.argv[1]; os.makedirs(out,exist_ok=True)
-GOLD=((0xFF,0xD0,0x55),(0xF2,0xB2,0x3E),(0xE0,0x96,0x28)); BLUE=((0x2F,0x9B,0xE0),(0x00,0x5E,0x9A),(0x14,0x2A,0x66))
-YF="extended-srgb:0.94000,0.70000,0.27000,1.00000"; BF="extended-srgb:0.00000,0.36900,0.60400,1.00000"
-make(out,'AppIconGold',GOLD,(0x00,0x5F,0x8C),(0x12,0x16,0x1E),(255,255,255,58),YF)            # the original's colours
-make(out,'AppIconGoldWhite',GOLD,(255,255,255),(0x1C,0x38,0x72),(255,255,255,70),YF)       # white wordmark, navy Club
-make(out,'AppIconBlueGold',BLUE,(255,255,255),(0xF9,0xD5,0x48),(255,255,255,34),BF)           # white wordmark, yellow Club
-# blue, white wordmark only (no accent layer)
-d=os.path.join(out,'AppIconBlue.icon'); os.makedirs(d+'/Assets',exist_ok=True)
-background(d+'/Assets/bg.png',*BLUE,(255,255,255,34)); full=Image.merge('L',(Image.eval(MAIN,lambda v:v),)) if False else None
-whole=Image.new('L',LOGO.size); whole.paste(LOGO.split()[3]); logo_layer(whole,(255,255,255),LW,d+'/Assets/logo.png')
-write(out,'AppIconBlue',[grp([lay('logo.png','Wordmark')],'Wordmark',0.6),grp([lay('bg.png','background',False)],'Background',0)],BF)
+def spec(name,default,dark=None,tinted=None,clear=None):
+    v=[{"value":default}]
+    if dark: v.append({"appearance":"dark","value":dark})
+    if tinted: v.append({"appearance":"tinted","value":tinted})
+    if clear: v.append({"appearance":"clear","value":clear})
+    return v
+
+def make_gold(out,name='AppIconGold',tinted_bg=True):
+    """Gold with the original's colours; Dark and Tinted get their own layers, because dark-on-gold becomes dark-on-dark
+    (illegible) when the system darkens or tints it: a dark background with a gold wordmark (Dark), and a dark
+    background with a white wordmark (Tinted, which the system then colours)."""
+    d=os.path.join(out,name+'.icon'); os.makedirs(d+'/Assets',exist_ok=True)
+    GOLD=((0xFF,0xD0,0x55),(0xF2,0xB2,0x3E),(0xE0,0x96,0x28))
+    background(d+'/Assets/bg.png',*GOLD,(255,255,255,58))
+    background(d+'/Assets/bg-dark.png',(0x2A,0x2F,0x45),(0x1B,0x20,0x33),(0x0E,0x11,0x1E),(255,255,255,26))
+    background(d+'/Assets/bg-tinted.png',(0x3A,0x3A,0x3A),(0x24,0x24,0x24),(0x12,0x12,0x12),(255,255,255,30))
+    logo_layer(MAIN,(0x00,0x5F,0x8C),LW,d+'/Assets/logo.png');   logo_layer(ACCENT,(0x12,0x16,0x1E),LW,d+'/Assets/club.png')
+    logo_layer(MAIN,(0xF9,0xD5,0x48),LW,d+'/Assets/logo-dark.png'); logo_layer(ACCENT,(0xFF,0xF3,0xC9),LW,d+'/Assets/club-dark.png')
+    logo_layer(MAIN,(255,255,255),LW,d+'/Assets/logo-tinted.png');   logo_layer(ACCENT,(255,255,255),LW,d+'/Assets/club-tinted.png')
+    # Icon Composer doesn't honour per-appearance image swaps written by hand, but it does honour `hidden-specializations`,
+    # so each look has its own layers and the others are hidden in that appearance.
+    LOOKS={'':('light',None),'-dark':('dark',None),'-tinted':('tinted',None)}
+    def L(img,name,look,glass=True):
+        hide={'':[{"value":False},{"appearance":"dark","value":True},{"appearance":"tinted","value":True}],
+              '-dark':[{"value":True},{"appearance":"dark","value":False}],
+              '-tinted':[{"value":True},{"appearance":"tinted","value":False}]}[look]
+        return {"glass":glass,"image-name":img,"name":name+look,"hidden-specializations":hide,"position":{"scale":1,"translation-in-points":[0,0]}}
+    groups=[grp([L('club'+k+'.png','Club',k) for k in ('','-dark','-tinted')],'Club',0.5),
+            grp([L('logo'+k+'.png','Wordmark',k) for k in ('','-dark','-tinted')],'Wordmark',0.5),
+            grp([L('bg'+k+'.png','background',k,False) for k in ('','-dark','-tinted')],'Background',0)]
+    json.dump({"fill":{"automatic-gradient":"extended-srgb:0.94000,0.70000,0.27000,1.00000"},"groups":groups,
+      "supported-platforms":{"squares":"shared"}},open(d+'/icon.json','w'),indent=2)
+
+def generate():
+    out=sys.argv[1]; os.makedirs(out,exist_ok=True)
+    GOLD=((0xFF,0xD0,0x55),(0xF2,0xB2,0x3E),(0xE0,0x96,0x28)); BLUE=((0x2F,0x9B,0xE0),(0x00,0x5E,0x9A),(0x14,0x2A,0x66))
+    YF="extended-srgb:0.94000,0.70000,0.27000,1.00000"; BF="extended-srgb:0.00000,0.36900,0.60400,1.00000"
+    make_gold(out)                                                                                  # the original's colours, with Dark and Tinted looks
+    make(out,'AppIconGoldWhite',GOLD,(255,255,255),(0x1C,0x38,0x72),(255,255,255,70),YF)       # white wordmark, navy Club
+    make(out,'AppIconBlueGold',BLUE,(255,255,255),(0xF9,0xD5,0x48),(255,255,255,34),BF)           # white wordmark, yellow Club
+    # blue, white wordmark only (no accent layer)
+    d=os.path.join(out,'AppIconBlue.icon'); os.makedirs(d+'/Assets',exist_ok=True)
+    background(d+'/Assets/bg.png',*BLUE,(255,255,255,34)); full=Image.merge('L',(Image.eval(MAIN,lambda v:v),)) if False else None
+    whole=Image.new('L',LOGO.size); whole.paste(LOGO.split()[3]); logo_layer(whole,(255,255,255),LW,d+'/Assets/logo.png')
+    write(out,'AppIconBlue',[grp([lay('logo.png','Wordmark')],'Wordmark',0.6),grp([lay('bg.png','background',False)],'Background',0)],BF)
+
+
+if __name__=='__main__': generate()
