@@ -1,4 +1,4 @@
-"""Generates the Liquid Glass app icon variants (Icon Composer .icon documents) from the white club wordmark.
+"""Generates the Liquid Glass Gold app icon (an Icon Composer .icon document) from the white club wordmark.
 Usage: python3 icons/build_icons.py NeoClub/Resources/AppIcons   (needs Pillow). Render previews with Icon Composer's ictool."""
 import json,os,math,sys,collections
 from PIL import Image, ImageDraw, ImageFilter
@@ -41,6 +41,13 @@ def background(path,c1,c2,c3,line):
     for row in range(-1,12):
         for col in range(-1,12): d.polygon(hexagon(col*w+(w/2 if row%2 else 0),row*r*1.5,r-5),outline=line,width=5)
     im=im.convert('RGBA'); im.alpha_composite(over); im.convert('RGB').save(path)
+def honeycomb_layer(path,line):
+    """Transparent honeycomb lines only, no fill: for Tinted/Clear the icon's background is the system's own material
+    (an opaque image there blocks it, so the tile looked flat and gray next to every other app's glass tile)."""
+    over=Image.new('RGBA',(S,S),(0,0,0,0)); d=ImageDraw.Draw(over); r=96; w=r*math.sqrt(3)
+    for row in range(-1,12):
+        for col in range(-1,12): d.polygon(hexagon(col*w+(w/2 if row%2 else 0),row*r*1.5,r-5),outline=line,width=5)
+    over.save(path)
 def logo_layer(mask,color,width,path):
     h=int(mask.height*width/mask.width); m=mask.resize((width,h),Image.LANCZOS)
     s=Image.new('RGBA',(width,h),color+(255,)); s.putalpha(m)
@@ -49,18 +56,10 @@ def _unused_hex_layer(path,r,color):
     m=Image.new('L',(S*2,S*2),0); ImageDraw.Draw(m).polygon(hexagon(S,S,r*2,rot=0),fill=255)
     m=m.filter(ImageFilter.GaussianBlur(40)).point(lambda v:255 if v>128 else 0).filter(ImageFilter.GaussianBlur(1.5)).resize((S,S),Image.LANCZOS)
     s=Image.new('RGBA',(S,S),color+(255,)); s.putalpha(m); s.save(path)
-def lay(img,name,glass=True): return {"glass":glass,"image-name":img,"name":name,"position":{"scale":1,"translation-in-points":[0,0]}}
 def grp(layers,name,sh,translucency=None):
     g={"layers":layers,"name":name,"shadow":{"kind":"neutral","opacity":sh},"specular":True}
     if translucency is not None: g["translucency"]={"enabled":True,"value":translucency}
     return g
-def write(out,name,groups,fill):
-    d=os.path.join(out,name+'.icon'); json.dump({"fill":{"automatic-gradient":fill},"groups":groups,"supported-platforms":{"squares":"shared"}},open(d+'/icon.json','w'),indent=2)
-def make(out,name,bg,main_col,accent_col,line,fill):
-    d=os.path.join(out,name+'.icon'); os.makedirs(d+'/Assets',exist_ok=True)
-    background(d+'/Assets/bg.png',*bg,line); logo_layer(MAIN,main_col,LW,d+'/Assets/logo.png'); logo_layer(ACCENT,accent_col,LW,d+'/Assets/club.png')
-    write(out,name,[grp([lay('club.png','Club')],'Club',0.5),grp([lay('logo.png','Wordmark')],'Wordmark',0.5),grp([lay('bg.png','background',False)],'Background',0)],fill)
-
 def spec(name,default,dark=None,tinted=None,clear=None):
     v=[{"value":default}]
     if dark: v.append({"appearance":"dark","value":dark})
@@ -75,7 +74,7 @@ def make_gold(out,name='AppIconGold',tinted_bg=True):
     d=os.path.join(out,name+'.icon'); os.makedirs(d+'/Assets',exist_ok=True)
     GOLD=((0xFF,0xD0,0x55),(0xF2,0xB2,0x3E),(0xE0,0x96,0x28))
     background(d+'/Assets/bg.png',*GOLD,(255,255,255,58))
-    background(d+'/Assets/bg-tinted.png',(0x3A,0x3A,0x3A),(0x24,0x24,0x24),(0x12,0x12,0x12),(255,255,255,30))
+    honeycomb_layer(d+'/Assets/bg-tinted.png',(255,255,255,40))
     logo_layer(MAIN,(0x00,0x5F,0x8C),LW,d+'/Assets/logo.png');   logo_layer(ACCENT,(0x12,0x16,0x1E),LW,d+'/Assets/club.png')
     logo_layer(MAIN,(0xF9,0xD5,0x48),LW,d+'/Assets/logo-dark.png'); logo_layer(ACCENT,(0xFF,0xF3,0xC9),LW,d+'/Assets/club-dark.png')
     logo_layer(MAIN,(255,255,255),LW,d+'/Assets/logo-tinted.png');   logo_layer(ACCENT,(255,255,255),LW,d+'/Assets/club-tinted.png')
@@ -89,7 +88,7 @@ def make_gold(out,name='AppIconGold',tinted_bg=True):
         return {"glass":glass,"image-name":img,"name":name+look,"hidden-specializations":hide,"position":{"scale":1,"translation-in-points":[0,0]}}
     groups=[grp([L('club'+k+'.png','Club',k) for k in ('','-dark','-tinted')],'Club',0.5),
             grp([L('logo'+k+'.png','Wordmark',k) for k in ('','-dark','-tinted')],'Wordmark',0.5),
-            grp([L('bg'+k+'.png','background',k,False) for k in ('','-tinted')],'Background',0)]
+            grp([L('bg'+k+'.png','background',k,False) for k in ('','-tinted')],'Background',0)]  # bg-tinted: honeycomb lines on the system's material
     # Dark: no background layer of ours at all; the icon's fill becomes the system's own dark material, so it matches
     # every other app's dark icon (a hand-picked gray never quite did).
     # No colour in the icon's own fill: gold lives only on the Light look's background layer. A gold fill (even one
@@ -102,16 +101,7 @@ def make_gold(out,name='AppIconGold',tinted_bg=True):
 
 def generate():
     out=sys.argv[1]; os.makedirs(out,exist_ok=True)
-    GOLD=((0xFF,0xD0,0x55),(0xF2,0xB2,0x3E),(0xE0,0x96,0x28)); BLUE=((0x2F,0x9B,0xE0),(0x00,0x5E,0x9A),(0x14,0x2A,0x66))
-    YF="extended-srgb:0.94000,0.70000,0.27000,1.00000"; BF="extended-srgb:0.00000,0.36900,0.60400,1.00000"
-    make_gold(out)                                                                                  # the original's colours, with Dark and Tinted looks
-    make(out,'AppIconGoldWhite',GOLD,(255,255,255),(0x1C,0x38,0x72),(255,255,255,70),YF)       # white wordmark, navy Club
-    make(out,'AppIconBlueGold',BLUE,(255,255,255),(0xF9,0xD5,0x48),(255,255,255,34),BF)           # white wordmark, yellow Club
-    # blue, white wordmark only (no accent layer)
-    d=os.path.join(out,'AppIconBlue.icon'); os.makedirs(d+'/Assets',exist_ok=True)
-    background(d+'/Assets/bg.png',*BLUE,(255,255,255,34)); full=Image.merge('L',(Image.eval(MAIN,lambda v:v),)) if False else None
-    whole=Image.new('L',LOGO.size); whole.paste(LOGO.split()[3]); logo_layer(whole,(255,255,255),LW,d+'/Assets/logo.png')
-    write(out,'AppIconBlue',[grp([lay('logo.png','Wordmark')],'Wordmark',0.6),grp([lay('bg.png','background',False)],'Background',0)],BF)
+    make_gold(out)   # the original's colours, with Dark and Tinted/Clear looks
 
 
 if __name__=='__main__': generate()
