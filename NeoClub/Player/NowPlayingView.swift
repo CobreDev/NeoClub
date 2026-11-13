@@ -201,6 +201,10 @@ struct NowPlayingView: View {
                 .padding(.bottom, 15)
                 .frame(width: column)
                 .frame(maxWidth: .infinity)
+                // With Up Next closed, Music centres the column on the whole window (Frida: artwork centre x 475.7 of
+                // 951, title at 276.7), not on what's left after the status column's inset; with the list open the
+                // column sits in the left area as measured (list 16 pt in from the inset edge).
+                .offset(x: mode == .artwork ? (insets.trailing - insets.leading) / 2 : 0)
 
                 if mode != .artwork {
                     panel

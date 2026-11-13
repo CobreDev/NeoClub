@@ -103,6 +103,23 @@ Without `sourceFrame`, the card slides off the bottom of the screen.
   - With the zoom, flicks paused for about 0.1 s, then the card shrank into a small box instead of the bar.
 - Then a hand-made pan. All replaced as described above in fd82602.
 
+## Layout matched to Music with Frida (2026-11-12)
+
+Method: dump Music's UIView frames (`layout.js`: UILabel / UIImageView / sliders / buttons converted to window coordinates) and NeoClub's drawn layers (`layout-neo.js`: leaf CALayers with contents, since SwiftUI draws no views), plus a full-resolution screenshot row scan (bright-pixel runs divided by the panel's height in points) for glyph positions. The VM's outer panel is 466x678 pt and its inner panel 669x951 pt, the phone's sizes.
+
+| centre from the top (pt) | Music outer | NeoClub outer | Music inner portrait | NeoClub inner portrait |
+|---|---|---|---|---|
+| title row | 415.0 | 415 | 643.8 | 643.4 |
+| scrubber track | 461.3 | 461 | 700.3 | 700.0 |
+| transport | 520.35 | 520.5 | 769.35 | 768.7 |
+| volume | 578.15 | 578.2 | 837.15 | 836.7 |
+| bottom row | 630.0 | 630 | 903.0 | 902.7 |
+| artwork (size, top) | 240.3, 90.5 | 238.5, 91.1 | 374.7, 151.2 | 375, 150.9 |
+
+Landscape (inner, 951x669): Music centres its column on the **whole window** with Up Next closed (artwork centre x 475.7, title x 276.7, slider 276.7 to 674.4, artwork 241 pt paused = 330 pt base at y 40); NeoClub did it in the area left after the status-column inset (42 pt left). Fixed with an offset of (trailing inset minus leading inset) / 2 in artwork mode. With Up Next open Music's list is at x 507.7 (width 343.3, 16 pt in from the inset edge), its column title at x 52, artwork centre 250.7: this agrees with the earlier device-based numbers, so the VM's horizontal geometry matches the phone.
+
+**Not changed, and why:** landscape vertical positions. NeoClub's landscape rows sit about 8 to 13 pt above Music's in the VM (title 389.6 vs 403, scrubber 445.8 vs 456.3, volume 564.9 vs 573.3, bottom row 613 vs 621; artwork base 317 vs 330 because it is limited by the inset-reduced height). The earlier landscape numbers came from the owner's device screenshots, and the VM's landscape safe-area insets are known to differ from the phone's, so matching the VM's vertical numbers could move NeoClub away from the phone. Settle it with a device screenshot of Music and NeoClub in landscape, or find how Music derives its vertical positions from the insets (it honours the bottom inset in landscape; in portrait it ignores it). Also unmeasured: Up Next / Info panel contents and the laptop posture.
+
 ## Open items / next steps
 
 1. **The owner checks the new close on the Duo.** Flick, slow drag, tap the grabber, laptop posture, and a list scrolled down in Up Next. They also check that dragging still feels right: it now uses the sheet's own resistance and its rules for closing versus snapping back. If something's off, ask for a screen recording of NeoClub and Music doing the same gesture.
