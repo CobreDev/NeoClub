@@ -15,7 +15,7 @@ final class ProgressSync {
     /// strings a launch argument sets; a plain `as? Bool` didn't, so `-syncProgress NO` used to leave sync on.
     static var isEnabled: Bool {
         get {
-            #if FORCE_NO_SYNC
+            #if FORCE_NO_SYNC || SCREENSHOT_DEMO
             return false  // vphone test builds signed in to the real account (the VM can't pass `-syncProgress NO`)
             #else
             return UserDefaults.standard.object(forKey: enabledKey) == nil ? true : UserDefaults.standard.bool(forKey: enabledKey)

@@ -9,31 +9,41 @@ struct HomeView: View {
     @State private var error: String?
     @State private var showAccount = false
 
+    private var shelvesToShow: [Grouping]? { home?.playlists }
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 30) {
+                #if SCREENSHOT_DEMO
+                DemoHome()
+                #else
                 OfflineBanner()
                 if let carousel = home?.carousel, !carousel.isEmpty {
                     CarouselView(items: carousel)
                 }
-                if let shelves = home?.playlists {
+                if let shelves = shelvesToShow {
                     ForEach(Array(shelves.enumerated()), id: \.element.id) { i, shelf in
                         Shelf(shelf: shelf)
                         // Next Up and Bookmarks sit right after "Continue Listening" (or first if there isn't one).
+                        #if !SCREENSHOT_DEMO
                         if i == 0 {
                             NextUpShelf(store: nextUp)
                             BookmarksShelf()
                         }
+                        #endif
                     }
+                    #if !SCREENSHOT_DEMO
                     if shelves.isEmpty {
                         NextUpShelf(store: nextUp)
                         BookmarksShelf()
                     }
+                    #endif
                 } else if let error {
                     ErrorView(message: error) { await load() }
                 } else {
                     LoadingView()
                 }
+                #endif
             }
             .padding(.bottom, 24)
         }
@@ -384,3 +394,52 @@ private struct NextUpShelf: View {
         }
     }
 }
+
+#if SCREENSHOT_DEMO
+/// The screenshot demo's Home: only the newest albums and the newest episodes, nothing promotional or personal.
+private struct DemoHome: View {
+    @State private var store = BrowseStore.shared
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 30) {
+            VStack(alignment: .leading, spacing: 12) {
+                ShelfHeader(title: "New Albums")
+                ScrollView(.horizontal, showsIndicators: false) {
+                    LazyHStack(alignment: .top, spacing: 14) {
+                        ForEach(store.newAlbums) { g in
+                            NavigationLink(value: Route.grouping(id: g.groupingID ?? "", preview: g)) {
+                                VStack(alignment: .leading, spacing: 6) {
+                                    Artwork(url: g.artworkURL, cornerRadius: 12)
+                                        .shadow(color: .black.opacity(0.25), radius: 8, y: 4)
+                                    Text(g.title).font(.univers(13, relativeTo: .footnote)).lineLimit(2, reservesSpace: true)
+                                }
+                                .shelfItem()
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                    .padding(.horizontal, 20)
+                }
+            }
+            VStack(alignment: .leading, spacing: 12) {
+                ShelfHeader(title: "Latest Episodes")
+                ScrollView(.horizontal, showsIndicators: false) {
+                    LazyHStack(alignment: .top, spacing: 14) {
+                        ForEach(latestEpisodes) { e in
+                            NavigationLink(value: Route.episode(e, groupingID: store.newAlbums.first?.groupingID)) {
+                                EpisodeCard(episode: e).shelfItem()
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                    .padding(.horizontal, 20)
+                }
+            }
+        }
+        .task { await store.load() }
+    }
+
+    /// The newest album's episodes, newest first.
+    private var latestEpisodes: [Episode] { Array((store.newAlbums.first?.contentList ?? []).reversed().prefix(10)) }
+}
+#endif

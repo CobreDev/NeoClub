@@ -38,7 +38,39 @@ struct MainTabView: View {
             }
             .onChange(of: paths) { SceneMemory.paths = paths }
             .onChange(of: tab) { SceneMemory.tab = tab }
+        #if SCREENSHOT_DEMO
+            .task { await runDemo() }
+        #endif
     }
+
+    #if SCREENSHOT_DEMO
+    /// `-demoScreen ...` (see `Demo`): Whit's Flop paused in the player, then the requested screen.
+    private func runDemo() async {
+        guard let screen = Demo.screen, let test = try? await AIOService.episode(Demo.episodeID) else { return }
+        // The album Whit's Flop belongs to (read-only list requests), for its page and its queue.
+        var album: Grouping?
+        for page in 1...6 {
+            guard let list = try? await AIOService.groupings(type: "Album", page: page).contentGroupings, !list.isEmpty else { break }
+            album = list.first { $0.contentList.contains { $0.id == test.id } }
+            if album != nil { break }
+        }
+        let episodes = test.inAlbum ?? album?.contentList ?? []
+        let after = episodes.firstIndex { $0.id == test.id }.map { Array(episodes.dropFirst($0 + 1)) } ?? []
+        player.play(test, queue: after, groupingID: album?.groupingID)
+        for _ in 0..<60 where !(player.duration > 0 && player.isPlaying) { try? await Task.sleep(for: .milliseconds(250)) }
+        player.seek(to: 42)
+        player.pause()
+        switch screen {
+        case "browse": tab = .browse
+        case "album": if let id = album?.groupingID { paths[.home] = [.grouping(id: id, preview: nil)] }
+        case "episode": paths[.home] = [.episode(test, groupingID: album?.groupingID)]
+        case "nowplaying", "upnext", "info":
+            try? await Task.sleep(for: .seconds(1))
+            player.showNowPlaying = true
+        default: break
+        }
+    }
+    #endif
 
     private var tabs: some View {
         @Bindable var player = player
