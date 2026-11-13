@@ -99,6 +99,14 @@ final class NowPlayingPresenter: NSObject {
     /// What was last asked for; an open asked for during a close happens when the close finishes.
     private var wantsShow = false
 
+    /// Opens Now Playing from the bar. Sets the flag and asks for the presentation directly, so an open still happens
+    /// if the flag was already true while nothing was on screen (a state that must never persist, but a missed
+    /// delegate callback after a very fast flick would leave it there).
+    func open() {
+        AudioPlayer.shared.showNowPlaying = true
+        update(show: true)
+    }
+
     /// Shows or hides Now Playing to match `show`.
     func update(show: Bool) {
         trace("update(show: \(show)) presented=\(presented != nil) dismissing=\(dismissing != nil)")
@@ -141,7 +149,8 @@ final class NowPlayingPresenter: NSObject {
         // A close whose controller is no longer on screen has finished even if its completion never ran.
         if let stuck = dismissing, stuck.view.window == nil, stuck.presentingViewController == nil { closeFinished() }
         guard presented == nil, dismissing == nil, let root else {
-            trace("present blocked: presented=\(presented != nil) dismissing=\(dismissing != nil) root=\(self.root != nil)"); return
+            if presented == nil { trace("present blocked: dismissing=\(dismissing != nil) root=\(self.root != nil)") }
+            return
         }
         let vc = controller()
         guard vc.presentingViewController == nil else { trace("present blocked: still attached"); return }
@@ -320,7 +329,16 @@ extension NowPlayingPresenter: UISheetPresentationControllerDelegate {
 
     /// A close by dragging finished (a backup for the transition's completion above).
     func presentationControllerDidDismiss(_ presentationController: UIPresentationController) {
-        trace("didDismiss")
+        trace("didDismiss presented=\(presented != nil)")
+        // The sheet is gone but the presenter never heard that it was closing (no willDismiss): finish that here, or
+        // the player stays marked open and tapping the bar does nothing.
+        if let vc = presented, presentationController.presentedViewController === vc {
+            presented = nil
+            isPresented = false
+            dismissing = vc
+            wantsShow = false
+            AudioPlayer.shared.showNowPlaying = false
+        }
         closeFinished()
     }
 }

@@ -187,13 +187,13 @@ struct MiniPlayer: View {
         .buttonStyle(.plain)
         .padding(.horizontal, 14)
         .contentShape(.rect)
-        .onTapGesture { player.showNowPlaying = true }
+        .onTapGesture { NowPlayingPresenter.shared.open() }
         // Swiping up opens Now Playing as soon as the swipe is clearly upward: the card animates open on its own,
         // like a tap, rather than following the finger.
         .gesture(DragGesture(minimumDistance: 8, coordinateSpace: .global)
             .onChanged { v in
                 let up = -v.translation.height
-                if up > 12, up > abs(v.translation.width), !player.showNowPlaying { player.showNowPlaying = true }
+                if up > 12, up > abs(v.translation.width), !NowPlayingPresenter.shared.isPresented { NowPlayingPresenter.shared.open() }
             })
         .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
     }
@@ -286,13 +286,20 @@ struct NowPlayingPresentation: View {
     static let space = "nowPlaying"
 
     var body: some View {
-        NowPlayingView(drawsBackground: false, insets: window.insets)
-            .padding(window.insets)
-            // Edge to edge behind the padded player (there's no system safe area here for it to extend into).
-            .background { NowPlayingBackdrop() }
-            .frame(width: window.size.width, height: window.size.height)
-            .coordinateSpace(.named(Self.space))
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        // The player is laid out at the window's size and pinned to the card's top-left, however small the card gets
+        // while it shrinks into the bar (Music's content never moves or scales in the card; the card clips it). A
+        // fixed-size frame inside a flexible one is centred by SwiftUI once the host is smaller than it, which showed
+        // the middle of the player and the artwork's bottom edge as a strip while the card closed (device recording
+        // 2026-11-12). An overlay on a clear base is sized by the host and always aligns the content's top-left to it.
+        Color.clear
+            .overlay(alignment: .topLeading) {
+                NowPlayingView(drawsBackground: false, insets: window.insets)
+                    .padding(window.insets)
+                    // Edge to edge behind the padded player (there's no system safe area here for it to extend into).
+                    .background { NowPlayingBackdrop() }
+                    .frame(width: window.size.width, height: window.size.height, alignment: .topLeading)
+                    .coordinateSpace(.named(Self.space))
+            }
             .ignoresSafeArea()
             // Kept built between opens: idle (no scrolling titles, no scrubber updates) while it's closed.
             .environment(\.isOnScreen, NowPlayingPresenter.shared.isPresented)
