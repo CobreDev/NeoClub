@@ -593,8 +593,10 @@ final class AudioPlayer {
         guard let episode else { return }
         var info: [String: Any] = [
             MPMediaItemPropertyTitle: episode.title,
-            MPMediaItemPropertyAlbumTitle: episode.albumTitle ?? "Adventures in Odyssey",
-            MPMediaItemPropertyArtist: "Adventures in Odyssey",
+            // The lock screen, Control Center and CarPlay show the artist under the title: every episode is by
+            // Adventures in Odyssey, so that line carries the album's number and name ("#82: Learning Curve") instead.
+            MPMediaItemPropertyArtist: episode.albumTitle ?? "Adventures in Odyssey",
+            MPMediaItemPropertyAlbumTitle: "Adventures in Odyssey",
             MPMediaItemPropertyPlaybackDuration: duration,
             MPNowPlayingInfoPropertyElapsedPlaybackTime: position,
             MPNowPlayingInfoPropertyPlaybackRate: isPlaying ? Double(rate) : 0,
