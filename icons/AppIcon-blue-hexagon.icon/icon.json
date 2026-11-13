@@ -1,0 +1,80 @@
+{
+  "fill": {
+    "automatic-gradient": "extended-srgb:0.00000,0.36900,0.60400,1.00000"
+  },
+  "groups": [
+    {
+      "layers": [
+        {
+          "glass": false,
+          "image-name": "logo.png",
+          "name": "Wordmark",
+          "position": {
+            "scale": 1,
+            "translation-in-points": [
+              0,
+              0
+            ]
+          }
+        }
+      ],
+      "name": "Wordmark",
+      "shadow": {
+        "kind": "neutral",
+        "opacity": 0.4
+      },
+      "specular": true
+    },
+    {
+      "layers": [
+        {
+          "glass": true,
+          "image-name": "hex.png",
+          "name": "Hexagon",
+          "position": {
+            "scale": 1,
+            "translation-in-points": [
+              0,
+              0
+            ]
+          }
+        }
+      ],
+      "name": "Hexagon",
+      "shadow": {
+        "kind": "neutral",
+        "opacity": 0.6
+      },
+      "specular": true,
+      "translucency": {
+        "enabled": true,
+        "value": 0.35
+      }
+    },
+    {
+      "layers": [
+        {
+          "glass": false,
+          "image-name": "bg.png",
+          "name": "background",
+          "position": {
+            "scale": 1,
+            "translation-in-points": [
+              0,
+              0
+            ]
+          }
+        }
+      ],
+      "name": "Background",
+      "shadow": {
+        "kind": "neutral",
+        "opacity": 0
+      },
+      "specular": true
+    }
+  ],
+  "supported-platforms": {
+    "squares": "shared"
+  }
+}

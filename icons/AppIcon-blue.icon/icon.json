@@ -21,7 +21,7 @@
       "name": "Club",
       "shadow": {
         "kind": "neutral",
-        "opacity": 0.55
+        "opacity": 0.5
       },
       "specular": true
     },
@@ -43,7 +43,7 @@
       "name": "Wordmark",
       "shadow": {
         "kind": "neutral",
-        "opacity": 0.55
+        "opacity": 0.5
       },
       "specular": true
     },
