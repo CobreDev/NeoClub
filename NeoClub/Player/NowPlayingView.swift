@@ -129,7 +129,7 @@ struct NowPlayingView: View {
         VStack(spacing: 0) {
             // Large: from the user's screenshots of Music on the Duo's inner screen upright (2026-11-12), NeoClub sat
             // 2.4 pt low from the bottom row up, with 1.9 pt less over the transport and 3.8 pt less over the scrubber.
-            // Gaps calibrated from the owner's device screenshots of Music (see the notes in HANDOFF.md). Do not retune
+            // Gaps calibrated from the owner's device screenshots of Music (see docs/layout-vs-music.md). Do not retune
             // these to Music running in the vphone VM: Music's vertical layout depends on the safe-area insets, which
             // differ between the VM and the phone (VM Music sat 1 to 3 pt lower than the phone's at the bottom row
             // and volume and 12 pt lower at the artwork, growing upward). NeoClub's is anchored to the screen's
