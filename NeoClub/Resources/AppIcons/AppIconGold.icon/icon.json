@@ -2,6 +2,17 @@
   "fill": {
     "automatic-gradient": "extended-srgb:0.94000,0.70000,0.27000,1.00000"
   },
+  "fill-specializations": [
+    {
+      "value": {
+        "automatic-gradient": "extended-srgb:0.94000,0.70000,0.27000,1.00000"
+      }
+    },
+    {
+      "appearance": "dark",
+      "value": "system-dark"
+    }
+  ],
   "groups": [
     {
       "layers": [
@@ -174,27 +185,6 @@
             {
               "appearance": "tinted",
               "value": true
-            }
-          ],
-          "position": {
-            "scale": 1,
-            "translation-in-points": [
-              0,
-              0
-            ]
-          }
-        },
-        {
-          "glass": false,
-          "image-name": "bg-dark.png",
-          "name": "background-dark",
-          "hidden-specializations": [
-            {
-              "value": true
-            },
-            {
-              "appearance": "dark",
-              "value": false
             }
           ],
           "position": {

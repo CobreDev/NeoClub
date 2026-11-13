@@ -75,7 +75,6 @@ def make_gold(out,name='AppIconGold',tinted_bg=True):
     d=os.path.join(out,name+'.icon'); os.makedirs(d+'/Assets',exist_ok=True)
     GOLD=((0xFF,0xD0,0x55),(0xF2,0xB2,0x3E),(0xE0,0x96,0x28))
     background(d+'/Assets/bg.png',*GOLD,(255,255,255,58))
-    background(d+'/Assets/bg-dark.png',(0x3A,0x3A,0x3C),(0x2C,0x2C,0x2E),(0x1C,0x1C,0x1E),(255,255,255,0))   # Dark: no honeycomb
     background(d+'/Assets/bg-tinted.png',(0x3A,0x3A,0x3A),(0x24,0x24,0x24),(0x12,0x12,0x12),(255,255,255,30))
     logo_layer(MAIN,(0x00,0x5F,0x8C),LW,d+'/Assets/logo.png');   logo_layer(ACCENT,(0x12,0x16,0x1E),LW,d+'/Assets/club.png')
     logo_layer(MAIN,(0xF9,0xD5,0x48),LW,d+'/Assets/logo-dark.png'); logo_layer(ACCENT,(0xFF,0xF3,0xC9),LW,d+'/Assets/club-dark.png')
@@ -90,8 +89,14 @@ def make_gold(out,name='AppIconGold',tinted_bg=True):
         return {"glass":glass,"image-name":img,"name":name+look,"hidden-specializations":hide,"position":{"scale":1,"translation-in-points":[0,0]}}
     groups=[grp([L('club'+k+'.png','Club',k) for k in ('','-dark','-tinted')],'Club',0.5),
             grp([L('logo'+k+'.png','Wordmark',k) for k in ('','-dark','-tinted')],'Wordmark',0.5),
-            grp([L('bg'+k+'.png','background',k,False) for k in ('','-dark','-tinted')],'Background',0)]
-    json.dump({"fill":{"automatic-gradient":"extended-srgb:0.94000,0.70000,0.27000,1.00000"},"groups":groups,
+            grp([L('bg'+k+'.png','background',k,False) for k in ('','-tinted')],'Background',0)]
+    # Dark: no background layer of ours at all; the icon's fill becomes the system's own dark material, so it matches
+    # every other app's dark icon (a hand-picked gray never quite did).
+    GOLDFILL={"automatic-gradient":"extended-srgb:0.94000,0.70000,0.27000,1.00000"}
+    for g in groups:
+        for l in g['layers']:
+            if l['name']=='background': l['hidden-specializations']=[{"value":False},{"appearance":"dark","value":True},{"appearance":"tinted","value":True}]
+    json.dump({"fill":GOLDFILL,"fill-specializations":[{"value":GOLDFILL},{"appearance":"dark","value":"system-dark"}],"groups":groups,
       "supported-platforms":{"squares":"shared"}},open(d+'/icon.json','w'),indent=2)
 
 def generate():
