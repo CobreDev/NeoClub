@@ -4,40 +4,54 @@ import SwiftUI
 
 // Now Playing's controls: scrubber, transport, volume, output, bookmark and menus.
 
-/// Apple-style scrubber: a thin capsule with no thumb that thickens while dragging; times below.
+/// Apple Music's scrubber (traced on iOS 27.2 in a vphone VM, 2026-11-13):
+/// - Touching it, anywhere on the bar, grows the bar from 7 to 16 pt and scales the bar with its times to 105%, about
+///   its centre (so it reaches past the margins); the times turn from 25% white to full white and sit 2 pt lower; the played
+///   part goes from 45% to full. All on one spring (response 0.37 s, damping 0.79). Letting go springs back on a looser
+///   one (response 0.39 s, damping 0.64), dipping a little under 7 pt on the way.
+/// - The drag is relative: touching down doesn't move the position, moving the finger by a fraction of the bar's width
+///   moves it by that fraction of the duration (1:1), whatever the finger's height. A tap does nothing.
 struct ScrubberBar: View {
     @Environment(AudioPlayer.self) private var player
     @Environment(\.isOnScreen) private var isOnScreen
-    /// Resets automatically if the drag is cancelled (e.g. by the sheet's dismiss gesture).
-    @GestureState private var dragFraction: Double?
+    /// Where the position was when the finger touched down, and how far the finger has moved along the bar. Resets
+    /// automatically if the drag is cancelled (e.g. by the sheet's dismiss gesture).
+    private struct Touch: Equatable { var start: Double; var dx: CGFloat }
+    @GestureState private var touch: Touch?
     /// Holds the released position until the seek lands, so the bar doesn't jump back.
     @State private var pendingFraction: Double?
+
+    static let grow = Animation.spring(response: 0.37, dampingFraction: 0.79)
+    static let release = Animation.spring(response: 0.39, dampingFraction: 0.64)
 
     var body: some View {
         let total = max(player.duration, 1)
         // Hidden (the card behind the mini player), don't read the position at all, so ticks don't redraw it.
         let position = isOnScreen ? player.position : 0
-        let fraction = dragFraction ?? pendingFraction ?? min(1, position / total)
-        let dragging = dragFraction != nil
+        let resting = pendingFraction ?? min(1, position / total)
+        let pressed = touch != nil
+        // Where the finger would leave it; the times use it too, so it is worked out from the measured bar width.
+        let fraction = touch.map { min(1, max(0, $0.start + Double($0.dx / barWidth))) } ?? resting
         VStack(spacing: 5.8) {
             GeometryReader { g in
                 ZStack(alignment: .leading) {
                     Capsule().fill(.white.opacity(0.25))
-                    Capsule().fill(.white.opacity(dragging ? 0.95 : 0.7))
+                    Capsule().fill(.white.opacity(pressed ? 1 : 0.7))
                         .frame(width: max(0, g.size.width * fraction))
                 }
-                .frame(height: dragging ? 12 : 7)
+                .frame(height: pressed ? 16 : 7)
                 .frame(maxHeight: .infinity)
                 .contentShape(.rect)
                 .highPriorityGesture(DragGesture(minimumDistance: 0)
-                    .updating($dragFraction) { v, state, _ in state = min(1, max(0, v.location.x / g.size.width)) }
+                    .updating($touch) { v, state, _ in state = Touch(start: state?.start ?? resting, dx: v.translation.width) }
                     .onEnded { v in
-                        let f = min(1, max(0, v.location.x / g.size.width))
+                        guard abs(v.translation.width) >= 1 else { return }
+                        let f = min(1, max(0, resting + Double(v.translation.width / g.size.width)))
                         pendingFraction = f
                         player.seek(to: f * total)
                         Task { try? await Task.sleep(for: .milliseconds(600)); pendingFraction = nil }
                     })
-                .animation(.spring(response: 0.25, dampingFraction: 0.8), value: dragging)
+                .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { barWidth = max($0, 1) }
             }
             .frame(height: 20)
             HStack {
@@ -46,13 +60,18 @@ struct ScrubberBar: View {
                 Text("-" + NowPlayingView.time(max(0, total - fraction * total)))
             }
             .font(.universBold(12, relativeTo: .caption).monospacedDigit())
-            .opacity(dragging ? 0.9 : 0.5)
+            .opacity(pressed ? 1 : 0.5)
+            .offset(y: pressed ? 2.1 : 0)
         }
+        .scaleEffect(pressed ? 1.05 : 1)
+        .animation(pressed ? Self.grow : Self.release, value: pressed)
         .accessibilityElement()
         .accessibilityLabel("Playback position")
         .accessibilityValue(NowPlayingView.time(position))
         .accessibilityAdjustableAction { dir in player.skip(by: dir == .increment ? 30 : -15) }
     }
+
+    @State private var barWidth: CGFloat = 1
 }
 
 /// Thin system volume bar between speaker glyphs, like Apple Music.
@@ -86,10 +105,28 @@ struct VolumeBar: View {
         }
     }
 
+    /// Music's volume slider is UIKit's thumbless slider (`sliderStyle = .thumbless`, "typically for media playback"):
+    /// touching it grows the track from 7 to 16 pt and brightens the played part on a spring, like the scrubber's.
+    /// MPVolumeView's own slider is that same class, so it gets the style (it is created lazily, hence at layout).
+    private final class ThumblessVolumeView: MPVolumeView {
+        override func layoutSubviews() {
+            super.layoutSubviews()
+            for case let slider as UISlider in allSubviews where slider.sliderStyle != .thumbless {
+                slider.sliderStyle = .thumbless
+                slider.minimumTrackTintColor = UIColor.white.withAlphaComponent(0.7)
+                slider.maximumTrackTintColor = UIColor.white.withAlphaComponent(0.25)
+            }
+        }
+        private var allSubviews: [UIView] {
+            var all: [UIView] = [], queue = subviews
+            while let v = queue.popLast() { all.append(v); queue += v.subviews }
+            return all
+        }
+    }
+
     private struct SystemVolume: UIViewRepresentable {
         func makeUIView(context: Context) -> MPVolumeView {
-            let v = MPVolumeView()
-            v.setVolumeThumbImage(UIImage(), for: .normal)
+            let v = ThumblessVolumeView()
             v.tintColor = UIColor.white.withAlphaComponent(0.7)
             return v
         }
