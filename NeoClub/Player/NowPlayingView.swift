@@ -98,7 +98,7 @@ struct NowPlayingView: View {
                     // Up to the column width, smaller when the screen is short, so the controls below never move.
                     bigArtwork.frame(maxWidth: content, maxHeight: content)
                     // Music: ~43 pt from the artwork's bottom to the title's middle on the inner screen upright.
-                    titleRow(large: large).padding(.top, large ? 34 : 21)
+                    titleRow(large: large).padding(.top, large ? 28.2 : 21)
                 } else {
                     // Music's Up Next header artwork: ~32 pt from the screen's top on the inner screen upright.
                     compactHeader.padding(.top, large ? 32 : 51)
@@ -117,7 +117,7 @@ struct NowPlayingView: View {
         .frame(maxWidth: .infinity, alignment: narrow ? .leading : .center)
         .padding(.top, -insets.top)
         // Output label ~23 pt above the screen's bottom edge, whatever the home-indicator inset.
-        .padding(.bottom, 16 - insets.bottom)
+        .padding(.bottom, (narrow ? 15.15 : 15.5) - insets.bottom)
     }
 
     /// Scrubber, transport, volume and the bottom buttons: the part that never moves. Gaps measured from Apple
@@ -127,10 +127,15 @@ struct NowPlayingView: View {
         VStack(spacing: 0) {
             // Large: from the user's screenshots of Music on the Duo's inner screen upright (2026-11-12), NeoClub sat
             // 2.4 pt low from the bottom row up, with 1.9 pt less over the transport and 3.8 pt less over the scrubber.
-            ScrubberBar().padding(.top, large ? 20.3 : 11)
-            transport(narrow: narrow).padding(.top, large ? 12.9 : 0)
-            VolumeBar().padding(.top, large ? 31 : 26)
-            bottomBar.padding(.top, large ? 36.4 : 22)
+            // From Frida on Music in the vphone VM (2026-11-12), centres from the screen's top. Compact (the Duo's
+            // outer screen, 466 x 678 pt): title row 415.0, scrubber track 461.3, transport 520.35, volume 578.15,
+            // bottom row 630.0. Large (the inner screen upright, 669 x 951 pt): title row 643.8, scrubber track
+            // 700.3, transport 769.35, volume 837.15, bottom row 903.0, artwork 374.7 pt from y = 151.2. The gaps
+            // below produce those within about a point.
+            ScrubberBar().padding(.top, large ? 17.65 : 8.45)
+            transport(narrow: narrow).padding(.top, large ? 11.8 : 1.9)
+            VolumeBar().padding(.top, large ? 31.25 : 21.1)
+            bottomBar.padding(.top, large ? 34.45 : 20.55)
         }
     }
 
