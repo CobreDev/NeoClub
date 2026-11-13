@@ -98,12 +98,12 @@ struct NowPlayingView: View {
                     // Up to the column width, smaller when the screen is short, so the controls below never move.
                     bigArtwork.frame(maxWidth: content, maxHeight: content)
                     // Music: ~43 pt from the artwork's bottom to the title's middle on the inner screen upright.
-                    titleRow(large: large).padding(.top, large ? 28.2 : 21)
+                    titleRow(large: large).padding(.top, large ? 34 : 21)
                 } else {
                     // Music's Up Next header artwork: ~32 pt from the screen's top on the inner screen upright.
                     compactHeader.padding(.top, large ? 32 : 51)
-                    if narrow { modeCapsules.padding(.top, 16) }
-                    panel.padding(.top, 16)
+                    if narrow { modeCapsules.padding(.top, 7.2) }
+                    panel.padding(.top, narrow ? 12.7 : 16)
                 }
             }
             .frame(maxHeight: .infinity, alignment: mode == .artwork ? .bottom : .top)
@@ -117,7 +117,7 @@ struct NowPlayingView: View {
         .frame(maxWidth: .infinity, alignment: narrow ? .leading : .center)
         .padding(.top, -insets.top)
         // Output label ~23 pt above the screen's bottom edge, whatever the home-indicator inset.
-        .padding(.bottom, (narrow ? 15.15 : 15.5) - insets.bottom)
+        .padding(.bottom, 16 - insets.bottom)
     }
 
     /// Scrubber, transport, volume and the bottom buttons: the part that never moves. Gaps measured from Apple
@@ -127,15 +127,15 @@ struct NowPlayingView: View {
         VStack(spacing: 0) {
             // Large: from the user's screenshots of Music on the Duo's inner screen upright (2026-11-12), NeoClub sat
             // 2.4 pt low from the bottom row up, with 1.9 pt less over the transport and 3.8 pt less over the scrubber.
-            // From Frida on Music in the vphone VM (2026-11-12), centres from the screen's top. Compact (the Duo's
-            // outer screen, 466 x 678 pt): title row 415.0, scrubber track 461.3, transport 520.35, volume 578.15,
-            // bottom row 630.0. Large (the inner screen upright, 669 x 951 pt): title row 643.8, scrubber track
-            // 700.3, transport 769.35, volume 837.15, bottom row 903.0, artwork 374.7 pt from y = 151.2. The gaps
-            // below produce those within about a point.
-            ScrubberBar().padding(.top, large ? 17.65 : 8.45)
-            transport(narrow: narrow).padding(.top, large ? 11.8 : 1.9)
-            VolumeBar().padding(.top, large ? 31.25 : 21.1)
-            bottomBar.padding(.top, large ? 34.45 : 20.55)
+            // Gaps calibrated from the owner's device screenshots of Music (see the notes in HANDOFF.md). Do not retune
+            // these to Music running in the vphone VM: Music's vertical layout depends on the safe-area insets, which
+            // differ between the VM and the phone (VM Music sat 1 to 3 pt lower than the phone's at the bottom row
+            // and volume and 12 pt lower at the artwork, growing upward). NeoClub's is anchored to the screen's
+            // edges, so only the phone's numbers are right for it.
+            ScrubberBar().padding(.top, large ? 20.3 : 11)
+            transport(narrow: narrow).padding(.top, large ? 12.9 : 0)
+            VolumeBar().padding(.top, large ? 31 : 26)
+            bottomBar.padding(.top, large ? 36.4 : 22)
         }
     }
 
@@ -315,7 +315,9 @@ struct NowPlayingView: View {
         .matchedGeometryEffect(id: "actions", in: ns)
     }
 
-    /// Small artwork + title above Info / Up Next, like Apple Music's queue view (72 pt artwork).
+    /// Small artwork + title above Info / Up Next, like Apple Music's queue view (72 pt artwork). Outer screen, from
+    /// Frida on Music (2026-11-12): artwork 72 pt at y 41.8, then the 38 pt buttons 8.2 pt under it (y 122), the
+    /// section header 21 pt under those, rows on a 56 pt pitch with 48 pt artwork.
     private var compactHeader: some View {
         HStack(spacing: 16) {
             artworkImage(cornerRadius: 8)
@@ -334,8 +336,8 @@ struct NowPlayingView: View {
     /// move up here from the sides of the transport.
     private var modeCapsules: some View {
         HStack(spacing: 12) {
-            SpeedButton().frame(maxWidth: .infinity, minHeight: 44).background(.white.opacity(0.14), in: .capsule)
-            SleepTimerButton().frame(maxWidth: .infinity, minHeight: 44).background(.white.opacity(0.14), in: .capsule)
+            SpeedButton().frame(maxWidth: .infinity, minHeight: 38).background(.white.opacity(0.14), in: .capsule)
+            SleepTimerButton().frame(maxWidth: .infinity, minHeight: 38).background(.white.opacity(0.14), in: .capsule)
         }
         .transition(Self.panelTransition)
     }

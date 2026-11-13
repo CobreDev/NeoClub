@@ -112,7 +112,7 @@ struct QueuePanel: View {
             }
             Spacer()
         }
-        .padding(.vertical, 6)
+        .padding(.vertical, 4)  // Music's rows: 48 pt artwork on a 56 pt pitch
         .contentShape(.rect)
     }
 }

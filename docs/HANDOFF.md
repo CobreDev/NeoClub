@@ -103,22 +103,18 @@ Without `sourceFrame`, the card slides off the bottom of the screen.
   - With the zoom, flicks paused for about 0.1 s, then the card shrank into a small box instead of the bar.
 - Then a hand-made pan. All replaced as described above in fd82602.
 
-## Layout matched to Music with Frida (2026-11-12)
+## Layout vs Music: what the vphone VM can and cannot tell you (2026-11-12)
 
-Method: dump Music's UIView frames (`layout.js`: UILabel / UIImageView / sliders / buttons converted to window coordinates) and NeoClub's drawn layers (`layout-neo.js`: leaf CALayers with contents, since SwiftUI draws no views), plus a full-resolution screenshot row scan (bright-pixel runs divided by the panel's height in points) for glyph positions. The VM's outer panel is 466x678 pt and its inner panel 669x951 pt, the phone's sizes.
+Method (works well): dump Music's UIView frames (`layout.js`: UILabel / UIImageView / sliders / buttons converted to window coordinates) and NeoClub's drawn layers (`layout-neo.js`: leaf CALayers with contents, since SwiftUI draws no views), plus a full-resolution screenshot row scan (bright-pixel runs divided by the panel's height in points) for glyph positions.
 
-| centre from the top (pt) | Music outer | NeoClub outer | Music inner portrait | NeoClub inner portrait |
-|---|---|---|---|---|
-| title row | 415.0 | 415 | 643.8 | 643.4 |
-| scrubber track | 461.3 | 461 | 700.3 | 700.0 |
-| transport | 520.35 | 520.5 | 769.35 | 768.7 |
-| volume | 578.15 | 578.2 | 837.15 | 836.7 |
-| bottom row | 630.0 | 630 | 903.0 | 902.7 |
-| artwork (size, top) | 240.3, 90.5 | 238.5, 91.1 | 374.7, 151.2 | 375, 150.9 |
+**Caveat that cost a wrong turn: vertical positions from Music running in the VM are NOT the phone's.** Music's vertical layout depends on the safe-area insets, which differ between the VM and the phone; NeoClub's is anchored to the screen's edges. The owner's device-screenshot calibrations (the constants in `controls()`, `titleRow` padding, the header's top padding, landscape) are the truth for the phone. Evidence: inner portrait, VM Music minus the phone-calibrated NeoClub was +0.85 pt at the bottom row, +2.8 at the volume, +2.55 at the transport, +3.65 at the scrubber, +6.3 at the title and +11.9 at the artwork top (Up Next header: 41.8 in the VM, 32 on the phone), growing steadily upward like a different top inset. I retuned these to the VM once and then reverted. **Only use the VM for inset-independent things:** sizes and relative gaps inside one piece of UI, motion (card path, springs, timings), which view moves with what, which animations run, centring rules.
 
-Landscape (inner, 951x669): Music centres its column on the **whole window** with Up Next closed (artwork centre x 475.7, title x 276.7, slider 276.7 to 674.4, artwork 241 pt paused = 330 pt base at y 40); NeoClub did it in the area left after the status-column inset (42 pt left). Fixed with an offset of (trailing inset minus leading inset) / 2 in artwork mode. With Up Next open Music's list is at x 507.7 (width 343.3, 16 pt in from the inset edge), its column title at x 52, artwork centre 250.7: this agrees with the earlier device-based numbers, so the VM's horizontal geometry matches the phone.
+Inset-independent facts from Music (kept in the code):
+- Up Next, outer screen: header artwork 72 pt; the buttons row (38 pt high) sits 8.2 pt under it; the section header 21 pt under the buttons; queue rows 48 pt artwork on a 56 pt pitch. (NeoClub: speed and sleep capsules instead of Music's shuffle/repeat/infinity/clear; an extra "From ..." line under "Up Next" that Music doesn't have, which puts its first row about 12 pt lower.)
+- Landscape with Up Next closed: Music centres the column on the **whole window** (artwork centre x 475.7 of 951); NeoClub's column was centred in the area left after the status-column inset (42 pt left). Fixed with an offset of (trailing inset minus leading inset) / 2 in artwork mode. With Up Next open Music's list is at x 507.7 (width 343.3, 16 pt in from the inset edge), its column title at x 52: this agrees with the owner's device numbers, so horizontal geometry in the VM matches the phone.
+- Paused artwork is 330 pt base x 0.73 = 241 pt in landscape (NeoClub's base was height-limited to 317 by the inset-reduced height; not changed, it is vertical).
 
-**Not changed, and why:** landscape vertical positions. NeoClub's landscape rows sit about 8 to 13 pt above Music's in the VM (title 389.6 vs 403, scrubber 445.8 vs 456.3, volume 564.9 vs 573.3, bottom row 613 vs 621; artwork base 317 vs 330 because it is limited by the inset-reduced height). The earlier landscape numbers came from the owner's device screenshots, and the VM's landscape safe-area insets are known to differ from the phone's, so matching the VM's vertical numbers could move NeoClub away from the phone. Settle it with a device screenshot of Music and NeoClub in landscape, or find how Music derives its vertical positions from the insets (it honours the bottom inset in landscape; in portrait it ignores it). Also unmeasured: Up Next / Info panel contents and the laptop posture.
+If vertical positions need checking again, get a device screenshot of Music and NeoClub in the same state and compare in pt (3 px per pt on the Duo).
 
 ## Open items / next steps
 
