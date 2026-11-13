@@ -17,21 +17,53 @@ struct SearchView: View {
         recentData = (try? JSONEncoder().encode(Array(list.prefix(8)))) ?? Data()
     }
 
+    @FocusState private var focused: Bool
+
     var body: some View {
-        Group {
-            if query.isEmpty {
-                ScrollView { emptyState.padding(.horizontal, 20).padding(.vertical, 12) }
-            } else {
-                results
+        VStack(spacing: 0) {
+            searchField
+            Group {
+                if query.isEmpty {
+                    ScrollView { emptyState.padding(.horizontal, 20).padding(.vertical, 12) }
+                } else {
+                    results
+                }
             }
         }
         .aioBackground()
         .task { await browse.load() }
         .navigationTitle("Search")
-        // The system's Liquid Glass field, always under the title: by default it tucks away until the page is pulled down.
-        .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .always),
-                    prompt: Text("Episodes, albums, characters, cast"))
         .task(id: query) { await search() }
+    }
+
+    /// A Liquid Glass field that always looks the way the system's does while it's being used (tinted glass with a
+    /// bright rim). The system's `.searchable` is a faint, unlit glass until tapped, which disappears on the blue page.
+    private var searchField: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "magnifyingglass").font(.system(size: 18, weight: .semibold))
+            TextField("", text: $query,
+                      prompt: Text("Episodes, albums, characters").foregroundStyle(.white.opacity(0.75)))
+                .font(.univers(18, relativeTo: .body))
+                .focused($focused)
+                .submitLabel(.search)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+            if !query.isEmpty {
+                Button { query = "" } label: {
+                    Image(systemName: "xmark.circle.fill").font(.system(size: 18)).foregroundStyle(.white.opacity(0.75))
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Clear Search")
+            }
+        }
+        .padding(.horizontal, 16)
+        .frame(height: 48)
+        .glassEffect(.regular.tint(Color.aioBlue.opacity(0.55)).interactive(), in: .capsule)
+        .contentShape(.capsule)
+        .onTapGesture { focused = true }
+        .padding(.horizontal, 20)
+        .padding(.top, 6)
+        .padding(.bottom, 6)
     }
 
     private var results: some View {
