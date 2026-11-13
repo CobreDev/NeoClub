@@ -104,7 +104,7 @@ struct NowPlayingView: View {
                     // 2026-11-13).
                     compactHeader.padding(.top, 32)
                     if narrow { modeCapsules.padding(.top, 8.4) }
-                    panel.padding(.top, narrow ? 12.7 : 16)
+                    panel.padding(.top, narrow ? 13.4 : 16)
                 }
             }
             .frame(maxHeight: .infinity, alignment: mode == .artwork ? .bottom : .top)
@@ -210,7 +210,7 @@ struct NowPlayingView: View {
 
                 if mode != .artwork {
                     panel
-                        .padding(.top, 16.2)
+                        .padding(.top, 14.3)
                         .frame(width: 343)
                         .padding(.trailing, 16)
                         .transition(Self.panelTransition)
