@@ -10,13 +10,24 @@ import SwiftUI
 ///   part goes from 45% to full. All on one spring (response 0.37 s, damping 0.79). Letting go springs back on a looser
 ///   one (response 0.39 s, damping 0.64), dipping a little under 7 pt on the way.
 /// - The drag is relative: touching down doesn't move the position, moving the finger by a fraction of the bar's width
-///   moves it by that fraction of the duration (1:1), whatever the finger's height. A tap does nothing.
+///   (as scaled up, so about 5% less than the resting width) moves it by that fraction of the duration, whatever the
+///   finger's height, and only once it has moved about 8 pt. A tap does nothing.
 struct ScrubberBar: View {
     @Environment(AudioPlayer.self) private var player
     @Environment(\.isOnScreen) private var isOnScreen
     /// Where the position was when the finger touched down, and how far the finger has moved along the bar. Resets
     /// automatically if the drag is cancelled (e.g. by the sheet's dismiss gesture).
-    private struct Touch: Equatable { var start: Double; var dx: CGFloat }
+    private struct Touch: Equatable {
+        var start: Double
+        var dx: CGFloat
+        /// Music's drag only starts once the finger has moved about 8 pt (a 6 pt drag did nothing, 10 pt moved the whole
+        /// distance: like a pan gesture's slop, the distance counts from where it went down).
+        var moving: Bool
+    }
+    static let slop: CGFloat = 8
+    /// The bar is 5% wider while held, and the finger's distance is measured against that wider bar (100 pt moved
+    /// 43 s of 152 on Music's 338 pt bar: 100 / (338 * 1.05) of the duration).
+    static let pressedScale: CGFloat = 1.05
     @GestureState private var touch: Touch?
     /// Holds the released position until the seek lands, so the bar doesn't jump back.
     @State private var pendingFraction: Double?
@@ -31,7 +42,7 @@ struct ScrubberBar: View {
         let resting = pendingFraction ?? min(1, position / total)
         let pressed = touch != nil
         // Where the finger would leave it; the times use it too, so it is worked out from the measured bar width.
-        let fraction = touch.map { min(1, max(0, $0.start + Double($0.dx / barWidth))) } ?? resting
+        let fraction = touch.map { min(1, max(0, $0.start + ($0.moving ? Double($0.dx / (barWidth * Self.pressedScale)) : 0))) } ?? resting
         VStack(spacing: 5.8) {
             GeometryReader { g in
                 ZStack(alignment: .leading) {
@@ -43,10 +54,13 @@ struct ScrubberBar: View {
                 .frame(maxHeight: .infinity)
                 .contentShape(.rect)
                 .highPriorityGesture(DragGesture(minimumDistance: 0)
-                    .updating($touch) { v, state, _ in state = Touch(start: state?.start ?? resting, dx: v.translation.width) }
+                    .updating($touch) { v, state, _ in
+                        let moving = (state?.moving ?? false) || abs(v.translation.width) >= Self.slop
+                        state = Touch(start: state?.start ?? resting, dx: v.translation.width, moving: moving)
+                    }
                     .onEnded { v in
-                        guard abs(v.translation.width) >= 1 else { return }
-                        let f = min(1, max(0, resting + Double(v.translation.width / g.size.width)))
+                        guard abs(v.translation.width) >= Self.slop else { return }
+                        let f = min(1, max(0, resting + Double(v.translation.width / (g.size.width * Self.pressedScale))))
                         pendingFraction = f
                         player.seek(to: f * total)
                         Task { try? await Task.sleep(for: .milliseconds(600)); pendingFraction = nil }
@@ -63,7 +77,7 @@ struct ScrubberBar: View {
             .opacity(pressed ? 1 : 0.5)
             .offset(y: pressed ? 2.1 : 0)
         }
-        .scaleEffect(pressed ? 1.05 : 1)
+        .scaleEffect(pressed ? Self.pressedScale : 1)
         .animation(pressed ? Self.grow : Self.release, value: pressed)
         .accessibilityElement()
         .accessibilityLabel("Playback position")
@@ -74,7 +88,7 @@ struct ScrubberBar: View {
     @State private var barWidth: CGFloat = 1
 }
 
-/// Thin system volume bar between speaker glyphs, like Apple Music.
+/// The system volume bar with speaker glyphs, like Apple Music.
 struct VolumeBar: View {
     /// CarPlay (and other routes the phone can't set the volume of) hide MPVolumeView's slider, leaving only the
     /// speaker glyphs. Music keeps the track there, dimmed and empty, so we draw that instead.
@@ -84,24 +98,34 @@ struct VolumeBar: View {
         AVAudioSession.sharedInstance().currentRoute.outputs.contains { $0.portType == .carAudio }
     }
 
+    private static let glyphSize: CGFloat = 14
+    private static let glyphOpacity = 0.6
+
     var body: some View {
-        HStack(spacing: 12) {
-            Image(systemName: "speaker.fill").font(.system(size: 12)).opacity(0.6)
+        Group {
             #if targetEnvironment(simulator)
             // The simulator has no system volume control; show the track so layout matches a device.
-            Capsule().fill(.white.opacity(0.25)).frame(height: 7)
-                .overlay(alignment: .leading) { GeometryReader { g in Capsule().fill(.white.opacity(0.7)).frame(width: g.size.width * 0.6) } }
+            stand(in: Capsule().fill(.white.opacity(0.25)).frame(height: 7)
+                .overlay(alignment: .leading) { GeometryReader { g in Capsule().fill(.white.opacity(0.7)).frame(width: g.size.width * 0.6) } })
             #else
             if fixedVolume {
-                Capsule().fill(.white.opacity(0.25)).frame(height: 7).frame(height: 20)
+                stand(in: Capsule().fill(.white.opacity(0.25)).frame(height: 7).frame(height: 20))
             } else {
                 SystemVolume().frame(height: 20)
             }
             #endif
-            Image(systemName: "speaker.wave.3.fill").font(.system(size: 12)).opacity(0.6)
         }
         .onReceive(NotificationCenter.default.publisher(for: AVAudioSession.routeChangeNotification)) { _ in
             fixedVolume = Self.routeHasFixedVolume()
+        }
+    }
+
+    /// A drawn track between the speaker glyphs, laid out like Music's slider (14 pt glyphs 11 pt from the track).
+    private func stand(in track: some View) -> some View {
+        HStack(spacing: 11) {
+            Image(systemName: "speaker.fill").font(.system(size: Self.glyphSize)).opacity(Self.glyphOpacity)
+            track
+            Image(systemName: "speaker.3.fill").font(.system(size: Self.glyphSize)).opacity(Self.glyphOpacity)
         }
     }
 
@@ -115,6 +139,13 @@ struct VolumeBar: View {
                 slider.sliderStyle = .thumbless
                 slider.minimumTrackTintColor = UIColor.white.withAlphaComponent(0.7)
                 slider.maximumTrackTintColor = UIColor.white.withAlphaComponent(0.25)
+                // The speaker glyphs are the slider's own value images, as in Music's (14 pt `speaker.fill` and
+                // `speaker.3.fill`): the thumbless slider's rubber band pushes them a few points when the volume is
+                // dragged past either end.
+                let config = UIImage.SymbolConfiguration(pointSize: 14)
+                slider.minimumValueImage = UIImage(systemName: "speaker.fill", withConfiguration: config)
+                slider.maximumValueImage = UIImage(systemName: "speaker.3.fill", withConfiguration: config)
+                slider.tintColor = UIColor.white.withAlphaComponent(0.6)
             }
         }
         private var allSubviews: [UIView] {
