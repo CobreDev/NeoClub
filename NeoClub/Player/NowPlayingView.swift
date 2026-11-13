@@ -100,7 +100,9 @@ struct NowPlayingView: View {
         // A regular iPhone (440 pt wide or less; the Duo's outer screen is 466) has its status bar across the top, so
         // Up Next's header starts under it. The Duo's measured 32 pt is from the screen's edge, where its status bar
         // is off to the side.
-        let regularPhone = size.width < 450
+        // Judged on the whole window: on the Duo's outer screen the status column's trailing inset takes ~85 pt of
+        // the 466, so `size.width` alone (~380) would pass for a regular phone and spread its controls out.
+        let regularPhone = size.width + insets.leading + insets.trailing < 450
         // Laid out from the screen's top edge, as Music is (it ignores the inner screen's ~89 pt top inset); the
         // grabber floats over the top instead of taking room, so the header and artwork are placed from the edge.
         return VStack(spacing: 0) {

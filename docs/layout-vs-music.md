@@ -31,6 +31,8 @@ After the changes every pair matched within about 1 pt (scrubber and volume trac
 
 The Duo constants above are calibrated for the Duo's 678 pt outer screen, where the fixed gaps bunch the controls near the bottom. On a taller regular iPhone Music spreads them out, so `portraitLayout` has a `regularPhone` branch (`size.width < 450`; the Duo's outer screen is 466 wide, so it keeps its own numbers).
 
+The test is on the whole window (`size.width + insets.leading + insets.trailing < 450`), not `size.width` alone: the Duo's outer screen puts its status column on the right, whose ~85 pt trailing inset leaves the player ~380 pt wide, so the width alone took the Duo's outer screen for a regular phone (fixed 2026-11-13; the controls had spread out and the artwork shrunk). Any new width test must allow for the insets.
+
 Reference: Music in a vphone VM created as an iPhone 18 Pro (`--device iPhone19,2`, iOS 27.2, screenConfig 1206x2622), which reports the real safe-area insets (62 top, 34 bottom), so unlike the Duo VM its vertical positions are trustworthy. Method: `frida/layout.js` on Music (UIView frames in window points) against `frida/layout-neo.js` on NeoClub (drawn layers), Music paused. Positions, window points:
 
 | Element | Music | NeoClub before | Now |
