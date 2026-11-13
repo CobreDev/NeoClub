@@ -26,3 +26,28 @@ The owner took the same states on the Duo in Music and NeoClub (outer, inner por
 | Landscape, Up Next | list 3.8 pt low, then rows 1.9 pt low | panel top padding 14.3 |
 
 After the changes every pair matched within about 1 pt (scrubber and volume tracks within 0.5 pt). Not compared: Info versus Lyrics panels (different content), laptop posture. Rows were compared with a real queue (56 pt pitch, 48 pt artwork on both).
+
+## Regular iPhones (iPhone 18 Pro, 402 x 874 pt), 2026-11-13
+
+The Duo constants above are calibrated for the Duo's 678 pt outer screen, where the fixed gaps bunch the controls near the bottom. On a taller regular iPhone Music spreads them out, so `portraitLayout` has a `regularPhone` branch (`size.width < 450`; the Duo's outer screen is 466 wide, so it keeps its own numbers).
+
+Reference: Music in a vphone VM created as an iPhone 18 Pro (`--device iPhone19,2`, iOS 27.2, screenConfig 1206x2622), which reports the real safe-area insets (62 top, 34 bottom), so unlike the Duo VM its vertical positions are trustworthy. Method: `frida/layout.js` on Music (UIView frames in window points) against `frida/layout-neo.js` on NeoClub (drawn layers), Music paused. Positions, window points:
+
+| Element | Music | NeoClub before | Now |
+|---|---|---|---|
+| Artwork (playing) | 354 wide at x 24, y 95 | 338 wide, under the title | 354 (`content + 16`, -8 padding each side) |
+| Artwork (paused, 0.73) | 258.7, y 142.7 to 401.4 | y 268 to 515 | y 143.5 to 402 |
+| Title text centre | 505 | 596 | 505.5 (title padding 42.3) |
+| Time labels centre | 598 | 676 | 597.9 (scrubber padding 24) |
+| Transport centre | 666.3 (skip buttons at x 95 and 307) | 713 | 666.3 (padding 33.2; side padding 45) |
+| Volume centre | 756.3 | 774 | 756.3 (padding 51.3) |
+| Bottom icons centre | 808.5 (x 87, 201, 315) | 824, x 52 and 350 | 808.7, x 86.7, 200.8, 314.7 (bottom padding 33, 35 pt side inset) |
+| Grabber centre | y 71 (7 under the safe area) | 21 | 71 |
+| Up Next header artwork | 72 pt at y 95 | y 68 | y 95 |
+| Up Next button row | y 182, 38 high, 15 under the artwork | 8.4 under, 37 high | 15 under, 38 high |
+
+Up Next's list: Music's first row is at y 280.3; NeoClub's is 9.7 lower, the "From ..." line kept on purpose.
+
+**Mode capsules.** Music's row is four equal capsules (shuffle, repeat, infinity, clear): 74.7 pt wide, 13 pt apart on the phone (about 73 wide and 15 apart on the Duo's outer screen). Speed and sleep timer are now two of those slots, centred (slots 2 and 3), not two half-width capsules.
+
+Not compared on the phone: Info versus Lyrics, landscape (the 18 Pro in landscape), the laptop posture (Duo only).

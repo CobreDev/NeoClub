@@ -66,10 +66,11 @@ struct NowPlayingView: View {
 
     /// Grabber centered ~21 pt below the screen's top edge on the outer screen and ~23 pt on the inner screen
     /// (Apple Music), whatever the top inset: on the inner screen upright the inset is ~89 pt and Music ignores it.
-    private func grabberTop(large: Bool) -> CGFloat { (large ? 10 : 9) - insets.top }
+    /// On a regular iPhone (the Dynamic Island's status bar spans the top) Music's grabber sits 7 pt under the safe area.
+    private func grabberTop(large: Bool, regular: Bool = false) -> CGFloat { (regular ? insets.top - 3 : (large ? 10 : 9)) - insets.top }
 
     /// The grabber; tapping it closes Now Playing, like Apple Music.
-    private func grabber(large: Bool = false) -> some View {
+    private func grabber(large: Bool = false, regular: Bool = false) -> some View {
         Button { player.showNowPlaying = false } label: {
             Capsule().fill(.white.opacity(0.35)).frame(width: 36, height: 5)
                 .frame(width: 120, height: 24)
@@ -80,7 +81,7 @@ struct NowPlayingView: View {
         // gone after a quarter second (traced with Frida), well before the rest of the player has faded.
         .opacity(NowPlayingPresenter.shared.isClosing ? 0 : 1)
         .animation(.timingCurve(0.25, 0.1, 0.25, 1, duration: 0.25), value: NowPlayingPresenter.shared.isClosing)
-        .padding(.top, grabberTop(large: large))
+        .padding(.top, grabberTop(large: large, regular: regular))
         .accessibilityLabel("Close Now Playing")
     }
 
@@ -109,35 +110,41 @@ struct NowPlayingView: View {
                     // (Music on the inner screen upright: artwork top ~82 pt from the screen's top edge).
                     Spacer(minLength: large ? 44 : 47)
                     // Up to the column width, smaller when the screen is short, so the controls below never move.
-                    bigArtwork.frame(maxWidth: content, maxHeight: content)
+                    // Regular iPhone: Music's artwork is 24 pt in from the edges, 8 wider on each side than the controls' column.
+                    if regularPhone {
+                        bigArtwork.frame(maxWidth: content + 16, maxHeight: content + 16).padding(.horizontal, -8)
+                    } else {
+                        bigArtwork.frame(maxWidth: content, maxHeight: content)
+                    }
                     // Music: ~43 pt from the artwork's bottom to the title's middle on the inner screen upright.
-                    titleRow(large: large).padding(.top, large ? 32.3 : 22.2)
+                    titleRow(large: large).padding(.top, large ? 32.3 : (regularPhone ? 42.3 : 22.2))
                 } else {
                     // Music's Up Next header artwork: 32 pt from the screen's top on both screens (owner's device screenshots,
                     // 2026-11-13).
-                    compactHeader.padding(.top, regularPhone ? insets.top + 6 : 32)
-                    if narrow { modeCapsules.padding(.top, 8.4) }
+                    // Regular iPhone (measured on Music in an iPhone 18 Pro VM): header artwork at y 95, 22 under the grabber.
+                    compactHeader.padding(.top, regularPhone ? 95 : 32)
+                    if narrow { modeCapsules(regular: regularPhone).padding(.top, regularPhone ? 15 : 8.4) }
                     panel.padding(.top, narrow ? 13.4 : 16)
                 }
             }
             .frame(maxHeight: .infinity, alignment: mode == .artwork ? .bottom : .top)
-            controls(narrow: narrow, large: large)
+            controls(narrow: narrow, large: large, regular: regularPhone)
         }
         .frame(width: content)
         .frame(maxHeight: .infinity)
         // Centered on the column, as before; its top measured from the screen's edge (grabberTop allows for the inset).
-        .overlay(alignment: .top) { grabber(large: large).padding(.top, insets.top) }
+        .overlay(alignment: .top) { grabber(large: large, regular: regularPhone).padding(.top, insets.top) }
         .padding(.leading, narrow ? lead : 0)
         .frame(maxWidth: .infinity, alignment: narrow ? .leading : .center)
         .padding(.top, -insets.top)
         // Output label ~23 pt above the screen's bottom edge, whatever the home-indicator inset.
-        .padding(.bottom, (large ? 17.7 : 17.2) - insets.bottom)
+        .padding(.bottom, (large ? 17.7 : regularPhone ? 33 : 17.2) - insets.bottom)
     }
 
     /// Scrubber, transport, volume and the bottom buttons: the part that never moves. Gaps measured from Apple
     /// Music on the Duo's outer screen (compact) and its inner screen upright (large, overlaid on a vphone
     /// screenshot of Music: title caps at 673, album 699, scrubber 749, transport 822, volume 896, buttons 965).
-    private func controls(narrow: Bool, large: Bool) -> some View {
+    private func controls(narrow: Bool, large: Bool, regular: Bool = false) -> some View {
         VStack(spacing: 0) {
             // Large: from the user's screenshots of Music on the Duo's inner screen upright (2026-11-12), NeoClub sat
             // 2.4 pt low from the bottom row up, with 1.9 pt less over the transport and 3.8 pt less over the scrubber.
@@ -146,10 +153,10 @@ struct NowPlayingView: View {
             // differ between the VM and the phone (VM Music sat 1 to 3 pt lower than the phone's at the bottom row
             // and volume and 12 pt lower at the artwork, growing upward). NeoClub's is anchored to the screen's
             // edges, so only the phone's numbers are right for it.
-            ScrubberBar().matchedGeometryEffect(id: "scrubber", in: ns).padding(.top, large ? 18.5 : 11)
-            transport(narrow: narrow).matchedGeometryEffect(id: "transport", in: ns).padding(.top, large ? 12.9 : 1.9)
-            VolumeBar().matchedGeometryEffect(id: "volume", in: ns).padding(.top, large ? 31 : 22.3)
-            bottomBar.matchedGeometryEffect(id: "bottomBar", in: ns).padding(.top, large ? 34.7 : 20.8)
+            ScrubberBar().matchedGeometryEffect(id: "scrubber", in: ns).padding(.top, large ? 18.5 : (regular ? 24 : 11))
+            transport(narrow: narrow, regular: regular).matchedGeometryEffect(id: "transport", in: ns).padding(.top, large ? 12.9 : (regular ? 33.2 : 1.9))
+            VolumeBar().matchedGeometryEffect(id: "volume", in: ns).padding(.top, large ? 31 : (regular ? 51.3 : 22.3))
+            bottomBar.matchedGeometryEffect(id: "bottomBar", in: ns).padding(.horizontal, regular ? 35 : 0).padding(.top, large ? 34.7 : (regular ? 22.7 : 20.8))
         }
     }
 
@@ -349,19 +356,22 @@ struct NowPlayingView: View {
         }
     }
 
-    /// Narrow screens only (Apple Music's capsule row of shuffle / repeat in Up Next): speed and sleep timer
-    /// move up here from the sides of the transport.
-    private var modeCapsules: some View {
-        HStack(spacing: 12) {
-            SpeedButton(capsule: true)
-            SleepTimerButton(capsule: true)
+    /// Narrow screens only (Apple Music's capsule row of shuffle / repeat / infinity / clear in Up Next): speed and sleep
+    /// timer move up here from the sides of the transport. Music's row is four equal capsules 13 pt apart (74.7 pt wide
+    /// on a 402 pt phone, 73 on the Duo's outer screen), so these are two of those slots, centred.
+    private func modeCapsules(regular: Bool = false) -> some View {
+        HStack(spacing: 13) {
+            Color.clear.frame(maxWidth: .infinity).frame(height: 0)
+            SpeedButton(capsule: true, height: regular ? 38 : 37)
+            SleepTimerButton(capsule: true, height: regular ? 38 : 37)
+            Color.clear.frame(maxWidth: .infinity).frame(height: 0)
         }
         .transition(Self.panelTransition)
     }
 
     /// Podcasts transport: speed · back 15 · play · forward 30 · sleep timer. Narrow screens show only the middle
     /// three, like Apple Music's outer-screen player.
-    private func transport(narrow: Bool) -> some View {
+    private func transport(narrow: Bool, regular: Bool = false) -> some View {
         HStack {
             if !narrow {
                 SpeedButton().frame(width: 44)
@@ -380,7 +390,7 @@ struct NowPlayingView: View {
                 SleepTimerButton().frame(width: 44)
             }
         }
-        .padding(.horizontal, narrow ? 54 : 0)
+        .padding(.horizontal, narrow ? (regular ? 45 : 54) : 0)
         .buttonStyle(.plain)
     }
 

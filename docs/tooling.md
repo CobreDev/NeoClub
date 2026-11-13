@@ -67,3 +67,14 @@ For the AltStore listing screenshots, on the iPhone 18 Pro simulator, from a sig
 - The simulator has no Simulator.app here: `xcrun simctl` (boot, install, launch, `io screenshot`, `status_bar`) does everything.
 
 The AltStore `screenshots` URLs are `https://raw.githubusercontent.com/CobreDev/NeoClub/main/screenshots/<file>` (the repo is public).
+
+## iPhone 18 Pro VM (`iphone18pro`)
+
+A vphone machine made as a regular iPhone for checking layouts at a normal phone size (402 x 874 pt), created 2026-11-13: `vphone-launchpad-cli vm create iphone18pro --device iPhone19,2 --iphone-source <24B119 restore ipsw> --cloudos-source ~/.vphone/ipsws/c0ecdb4b*.ipsw` plus the five `--allow kernel-exp-frida_*` patches `duo-lab` has (13.7 GB download, about 32 GB template, 8 CPUs, 8 GB). Notes:
+- The first boot of a new machine needs vphone-vm allowed past AMFI (`sudo .../vphone-escalator allow .../vphone-vm`, which the owner ran); without it creation stops at "AMFI blocked vphone-vm". A failed attempt leaves a template folder in `~/.vphone/machines` to delete by hand (there is no `vm delete`).
+- Input coordinates are plain points (402 x 874), unlike the Duo's scaled 466 x 678 space. Screenshots come back 414 x 900 at `max_dimension` 900.
+- **Frida is not installed by default.** Push `frida-server` (arm64e, from the Frida `.deb`) and `frida-agent.dylib` into `/private/var/frida/usr/...`, push a launch-daemon plist whose `ProgramArguments` are `[.../frida-server, -l, 0.0.0.0]` (without `-l` it listens on the guest's loopback only), `services.load` the plist (`services.unload` takes the plist `paths`, not a label), then `frida -H <guest ip> -n Music`. The guest IP is in `device.network`.
+- Music has no library by default: copy songs in (the owner added some), then play one and open Now Playing.
+- Auto-Lock: set to Never in the guest's Settings (Display & Brightness), because a locked guest suspends the app and Frida can't attach. `display.auto_lock` may keep reporting the old value.
+- NeoClub there: build with `-DFORCE_NO_SYNC -DSCREENSHOT_UI_ONLY` (no account: placeholder Whit's Flop plus queued placeholder episodes), install with the installer script with `VM=iphone18pro`.
+- The same VM can't be switched to a fold posture (`display.posture` says "no device pose override").
