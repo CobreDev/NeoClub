@@ -16,11 +16,11 @@ struct BrowseView: View {
         Category(type: "Album", title: "Club Adventures", symbol: "star.fill", filter: .clubAlbums,
                  colors: [Color(hex: 0xF0506E), Color(hex: 0xB0123B)]),
         Category(type: "Series", title: "Series", symbol: "rectangle.stack.fill",
-                 colors: [Color(hex: 0x3CC48A), Color(hex: 0x0E7C5A)]),
+                 colors: [Color(hex: 0x2FB8F0), Color(hex: 0x1659C7)]),
         Category(type: "Collection", title: "Collections", symbol: "square.grid.2x2.fill",
                  colors: [Color(hex: 0x9B6CF0), Color(hex: 0x5631B5)]),
         Category(type: "Podcast Year", title: "Podcasts", symbol: "mic.fill",
-                 colors: [Color(hex: 0x2FB8F0), Color(hex: 0x1659C7)]),
+                 colors: [Color(hex: 0x3CC48A), Color(hex: 0x0E7C5A)]),
         Category(type: "Book Series", title: "Books", symbol: "book.fill",
                  colors: [Color(hex: 0x20C5C0), Color(hex: 0x0A7A8C)]),
     ]
