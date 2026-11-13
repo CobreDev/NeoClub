@@ -41,10 +41,20 @@ enum AIOService {
 
     /// Full episode detail including signed stream/download URLs.
     static func episode(_ id: String, groupingID: String? = nil) async throws -> Episode {
-        try await api.get("/content/\(id)", query: [
+        var episode: Episode = try await api.get("/content/\(id)", query: [
             "player": "true", "recommendations": "true", "tag": "false",
             "series": "false", "parent": "false", "content_grouping_id": groupingID,
         ])
+        // An album that isn't fully out yet can leave its episodes without an album name ("#83: Phase One"): borrow it
+        // from an episode alongside it, else from the album the episode was opened from.
+        if episode.albumTitle == nil {
+            if let sibling = episode.inAlbum?.lazy.compactMap(\.albumTitle).first {
+                episode.albumName = sibling
+            } else if let groupingID, let album = (try? await grouping(groupingID)) ?? nil, album.type == "Album" {
+                episode.albumName = album.name
+            }
+        }
+        return episode
     }
 
     static func grouping(_ id: String) async throws -> Grouping? {

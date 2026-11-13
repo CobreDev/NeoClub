@@ -131,7 +131,7 @@ struct Episode: Decodable, Identifiable, Hashable {
     let type: String?
     let subtype: String?
     let episodeNumber: String?
-    let albumName: String?
+    var albumName: String?
     let description: String?
     let airDate: String?
     /// Milliseconds.
