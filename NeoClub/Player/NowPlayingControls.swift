@@ -19,7 +19,7 @@ struct ScrubberBar: View {
         let position = isOnScreen ? player.position : 0
         let fraction = dragFraction ?? pendingFraction ?? min(1, position / total)
         let dragging = dragFraction != nil
-        VStack(spacing: 4) {
+        VStack(spacing: 5.8) {
             GeometryReader { g in
                 ZStack(alignment: .leading) {
                     Capsule().fill(.white.opacity(0.25))

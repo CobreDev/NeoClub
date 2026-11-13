@@ -98,11 +98,12 @@ struct NowPlayingView: View {
                     // Up to the column width, smaller when the screen is short, so the controls below never move.
                     bigArtwork.frame(maxWidth: content, maxHeight: content)
                     // Music: ~43 pt from the artwork's bottom to the title's middle on the inner screen upright.
-                    titleRow(large: large).padding(.top, large ? 34 : 21)
+                    titleRow(large: large).padding(.top, large ? 32.3 : 22.2)
                 } else {
-                    // Music's Up Next header artwork: ~32 pt from the screen's top on the inner screen upright.
-                    compactHeader.padding(.top, large ? 32 : 51)
-                    if narrow { modeCapsules.padding(.top, 7.2) }
+                    // Music's Up Next header artwork: 32 pt from the screen's top on both screens (owner's device screenshots,
+                    // 2026-11-13).
+                    compactHeader.padding(.top, 32)
+                    if narrow { modeCapsules.padding(.top, 8.4) }
                     panel.padding(.top, narrow ? 12.7 : 16)
                 }
             }
@@ -117,7 +118,7 @@ struct NowPlayingView: View {
         .frame(maxWidth: .infinity, alignment: narrow ? .leading : .center)
         .padding(.top, -insets.top)
         // Output label ~23 pt above the screen's bottom edge, whatever the home-indicator inset.
-        .padding(.bottom, 16 - insets.bottom)
+        .padding(.bottom, (large ? 17.7 : 17.2) - insets.bottom)
     }
 
     /// Scrubber, transport, volume and the bottom buttons: the part that never moves. Gaps measured from Apple
@@ -132,10 +133,10 @@ struct NowPlayingView: View {
             // differ between the VM and the phone (VM Music sat 1 to 3 pt lower than the phone's at the bottom row
             // and volume and 12 pt lower at the artwork, growing upward). NeoClub's is anchored to the screen's
             // edges, so only the phone's numbers are right for it.
-            ScrubberBar().padding(.top, large ? 20.3 : 11)
-            transport(narrow: narrow).padding(.top, large ? 12.9 : 0)
-            VolumeBar().padding(.top, large ? 31 : 26)
-            bottomBar.padding(.top, large ? 36.4 : 22)
+            ScrubberBar().padding(.top, large ? 18.5 : 11)
+            transport(narrow: narrow).padding(.top, large ? 12.9 : 1.9)
+            VolumeBar().padding(.top, large ? 31 : 22.3)
+            bottomBar.padding(.top, large ? 34.7 : 20.8)
         }
     }
 
@@ -185,7 +186,8 @@ struct NowPlayingView: View {
     /// under the volume; with Up Next, a 343 pt list 16 pt in from the right and the column centered in what's left.
     private func landscapeLayout(_ size: CGSize) -> some View {
         let column: CGFloat = 400
-        let art = min(330, size.height * 0.5)
+        // Music's artwork is 330 pt (device screenshot); the cap is only for a window too short for it.
+        let art = min(330, (size.height + insets.top + insets.bottom) * 0.5)
         return VStack(spacing: 0) {
             grabber()
             HStack(spacing: 0) {
@@ -208,7 +210,7 @@ struct NowPlayingView: View {
 
                 if mode != .artwork {
                     panel
-                        .padding(.top, 20)
+                        .padding(.top, 16.2)
                         .frame(width: 343)
                         .padding(.trailing, 16)
                         .transition(Self.panelTransition)
@@ -217,6 +219,8 @@ struct NowPlayingView: View {
             landscapeBottomBar
                 .padding(.horizontal, 40)
         }
+        // Music's whole column sits 8.6 pt lower than the layout's own bottom edge (device screenshots, 2026-11-13).
+        .padding(.bottom, -8.6)
     }
 
     /// Landscape: output route bottom-left, Info and Up Next bottom-right (Apple Music on a wide screen).
@@ -336,8 +340,8 @@ struct NowPlayingView: View {
     /// move up here from the sides of the transport.
     private var modeCapsules: some View {
         HStack(spacing: 12) {
-            SpeedButton().frame(maxWidth: .infinity, minHeight: 38).background(.white.opacity(0.14), in: .capsule)
-            SleepTimerButton().frame(maxWidth: .infinity, minHeight: 38).background(.white.opacity(0.14), in: .capsule)
+            SpeedButton().frame(maxWidth: .infinity).frame(height: 37).background(.white.opacity(0.14), in: .capsule)
+            SleepTimerButton().frame(maxWidth: .infinity).frame(height: 37).background(.white.opacity(0.14), in: .capsule)
         }
         .transition(Self.panelTransition)
     }
