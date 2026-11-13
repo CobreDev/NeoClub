@@ -341,8 +341,8 @@ struct NowPlayingView: View {
     /// move up here from the sides of the transport.
     private var modeCapsules: some View {
         HStack(spacing: 12) {
-            SpeedButton().frame(maxWidth: .infinity).frame(height: 37).background(.white.opacity(0.14), in: .capsule)
-            SleepTimerButton().frame(maxWidth: .infinity).frame(height: 37).background(.white.opacity(0.14), in: .capsule)
+            SpeedButton(capsule: true)
+            SleepTimerButton(capsule: true)
         }
         .transition(Self.panelTransition)
     }

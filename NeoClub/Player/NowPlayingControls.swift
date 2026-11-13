@@ -82,9 +82,25 @@ struct VolumeBar: View {
     }
 }
 
+private extension View {
+    /// A menu label: 44 pt square as a transport button, or Up Next's full-width 37 pt capsule.
+    @ViewBuilder func capsuleLabel(_ capsule: Bool) -> some View {
+        if capsule {
+            frame(maxWidth: .infinity).frame(height: 37)
+                .background(.white.opacity(0.14), in: .capsule)
+                .contentShape(.capsule)
+        } else {
+            frame(width: 44, height: 44)
+        }
+    }
+}
+
 /// "1×" playback-speed control, as in Apple Podcasts.
 struct SpeedButton: View {
     @Environment(AudioPlayer.self) private var player
+    /// Up Next's wide capsule: the capsule itself is the menu's label, so the menu opens from (and closes back into)
+    /// the capsule rather than a 44 pt circle, and the text is at full strength (dimmed it read as disabled).
+    var capsule = false
     private let speeds: [Float] = [0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0]
 
     var body: some View {
@@ -96,8 +112,8 @@ struct SpeedButton: View {
         } label: {
             Text(String(format: "%g×", player.rate))
                 .font(.universBold(15, relativeTo: .subheadline))
-                .opacity(player.rate == 1 ? 0.6 : 1)
-                .frame(width: 44, height: 44)
+                .opacity(player.rate == 1 && !capsule ? 0.6 : 1)
+                .capsuleLabel(capsule)
         }
         .accessibilityLabel("Playback speed")
     }
@@ -106,6 +122,8 @@ struct SpeedButton: View {
 /// Moon sleep-timer control, as in Apple Podcasts.
 struct SleepTimerButton: View {
     @Environment(AudioPlayer.self) private var player
+    /// See `SpeedButton.capsule`.
+    var capsule = false
 
     var body: some View {
         Menu {
@@ -126,10 +144,10 @@ struct SleepTimerButton: View {
                 } else {
                     Image(systemName: player.sleepTimer == .off ? "moon.zzz" : "moon.zzz.fill")
                         .font(.system(size: 19, weight: .medium))
-                        .foregroundStyle(player.sleepTimer == .off ? Color.white.opacity(0.6) : Color.aioYellow)
+                        .foregroundStyle(player.sleepTimer == .off ? Color.white.opacity(capsule ? 1 : 0.6) : Color.aioYellow)
                 }
             }
-            .frame(width: 44, height: 44)
+            .capsuleLabel(capsule)
         }
         .accessibilityLabel("Sleep timer")
     }
