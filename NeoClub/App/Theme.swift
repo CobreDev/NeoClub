@@ -21,18 +21,38 @@ extension Color {
     }
 }
 
-/// Official AIO typefaces: Jacoby for display, Univers for text.
+/// Official AIO typefaces: Jacoby for display, Univers for text. Both follow Dynamic Type: each size scales with
+/// the system text style of about that size (a 12 pt caption like Caption, a 17 pt line like Body), so smaller and
+/// larger text settings change them the way they change the system's own text.
 extension Font {
-    static func jacoby(_ size: CGFloat, relativeTo style: Font.TextStyle = .largeTitle) -> Font {
-        .custom("JacobyICGBlack", size: size, relativeTo: style)
+    static func jacoby(_ size: CGFloat, relativeTo style: Font.TextStyle? = nil) -> Font {
+        .custom("JacobyICGBlack", size: size, relativeTo: style ?? .matching(size))
     }
 
-    static func univers(_ size: CGFloat, relativeTo style: Font.TextStyle = .body) -> Font {
-        .custom("Univers", size: size, relativeTo: style)
+    static func univers(_ size: CGFloat, relativeTo style: Font.TextStyle? = nil) -> Font {
+        .custom("Univers", size: size, relativeTo: style ?? .matching(size))
     }
 
-    static func universBold(_ size: CGFloat, relativeTo style: Font.TextStyle = .body) -> Font {
-        .custom("Univers-Bold", size: size, relativeTo: style)
+    static func universBold(_ size: CGFloat, relativeTo style: Font.TextStyle? = nil) -> Font {
+        .custom("Univers-Bold", size: size, relativeTo: style ?? .matching(size))
+    }
+}
+
+extension Font.TextStyle {
+    /// The system text style nearest a point size at the default text setting.
+    static func matching(_ size: CGFloat) -> Font.TextStyle {
+        switch size {
+        case ..<11.5: .caption2
+        case ..<12.5: .caption
+        case ..<14: .footnote
+        case ..<15.5: .subheadline
+        case ..<16.5: .callout
+        case ..<18.5: .body
+        case ..<21: .title3
+        case ..<25: .title2
+        case ..<31: .title
+        default: .largeTitle
+        }
     }
 }
 
