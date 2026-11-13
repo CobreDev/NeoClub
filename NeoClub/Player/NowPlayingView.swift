@@ -83,17 +83,21 @@ struct NowPlayingView: View {
         let trail = narrow ? max(0, 32 - insets.trailing) : 28
         let content = min(size.width - lead - trail, 513)
         let large = size.height > 800
+        // Laid out from the screen's top edge, as Music is (it ignores the inner screen's ~89 pt top inset); the
+        // grabber floats over the top instead of taking room, so the header and artwork are placed from the edge.
         return VStack(spacing: 0) {
-            grabber(large: large)
             VStack(spacing: 0) {
                 if mode == .artwork {
-                    // Music's artwork starts ~14 pt under the grabber on the Duo's 466 × 678 pt inner screen.
-                    Spacer(minLength: large ? 22 : 14)
+                    // Never closer to the top than just under the grabber; with room, the artwork sits on the title
+                    // (Music on the inner screen upright: artwork top ~82 pt from the screen's top edge).
+                    Spacer(minLength: large ? 44 : 47)
                     // Up to the column width, smaller when the screen is short, so the controls below never move.
                     bigArtwork.frame(maxWidth: content, maxHeight: content)
-                    titleRow(large: large).padding(.top, 21)
+                    // Music: ~43 pt from the artwork's bottom to the title's middle on the inner screen upright.
+                    titleRow(large: large).padding(.top, large ? 34 : 21)
                 } else {
-                    compactHeader.padding(.top, 18)
+                    // Music's Up Next header artwork: ~32 pt from the screen's top on the inner screen upright.
+                    compactHeader.padding(.top, large ? 32 : 51)
                     if narrow { modeCapsules.padding(.top, 16) }
                     panel.padding(.top, 16)
                 }
@@ -102,8 +106,12 @@ struct NowPlayingView: View {
             controls(narrow: narrow, large: large)
         }
         .frame(width: content)
+        .frame(maxHeight: .infinity)
+        // Centered on the column, as before; its top measured from the screen's edge (grabberTop allows for the inset).
+        .overlay(alignment: .top) { grabber(large: large).padding(.top, insets.top) }
         .padding(.leading, narrow ? lead : 0)
         .frame(maxWidth: .infinity, alignment: narrow ? .leading : .center)
+        .padding(.top, -insets.top)
         // Output label ~23 pt above the screen's bottom edge, whatever the home-indicator inset.
         .padding(.bottom, 16 - insets.bottom)
     }
@@ -113,10 +121,12 @@ struct NowPlayingView: View {
     /// screenshot of Music: title caps at 673, album 699, scrubber 749, transport 822, volume 896, buttons 965).
     private func controls(narrow: Bool, large: Bool) -> some View {
         VStack(spacing: 0) {
-            ScrubberBar().padding(.top, large ? 16.5 : 11)
-            transport(narrow: narrow).padding(.top, large ? 11 : 0)
+            // Large: from the user's screenshots of Music on the Duo's inner screen upright (2026-11-12), NeoClub sat
+            // 2.4 pt low from the bottom row up, with 1.9 pt less over the transport and 3.8 pt less over the scrubber.
+            ScrubberBar().padding(.top, large ? 20.3 : 11)
+            transport(narrow: narrow).padding(.top, large ? 12.9 : 0)
             VolumeBar().padding(.top, large ? 31 : 26)
-            bottomBar.padding(.top, large ? 34 : 22)
+            bottomBar.padding(.top, large ? 36.4 : 22)
         }
     }
 
@@ -161,36 +171,38 @@ struct NowPlayingView: View {
 
     /// Landscape inner screen (Apple Music on a wide screen): a ~400 pt column with 330 pt artwork, centered; with
     /// Up Next open, the column moves to the middle of the left half and the list fills a column on the right.
+    /// Measured from the user's screenshots of Music on the Duo's inner screen sideways (2026-11-12, in pt): artwork
+    /// 330 pt from y 40, title ~34 pt under it, scrubber 53 pt lower, transport 59, volume 58, the bottom row 47 pt
+    /// under the volume; with Up Next, a 343 pt list 16 pt in from the right and the column centered in what's left.
     private func landscapeLayout(_ size: CGSize) -> some View {
         let column: CGFloat = 400
-        let art = min(330, size.height * 0.48)
+        let art = min(330, size.height * 0.5)
         return VStack(spacing: 0) {
             grabber()
             HStack(spacing: 0) {
                 VStack(spacing: 0) {
-                    Spacer(minLength: 8)
+                    Spacer(minLength: 0)
                     bigArtwork.frame(width: art, height: art)
-                    Spacer(minLength: 20)
-                    titleRow()
-                    ScrubberBar().padding(.top, 18)
-                    transport(narrow: false).padding(.top, 18)
+                    titleRow().padding(.top, 23)
+                    ScrubberBar().padding(.top, 12)
+                    transport(narrow: false).padding(.top, 3)
                     VolumeBar().padding(.top, 22)
-                    Spacer(minLength: 8)
                 }
+                // Anchored to the bottom row, the volume ~47 pt over its middle.
+                .padding(.bottom, 15)
                 .frame(width: column)
                 .frame(maxWidth: .infinity)
 
                 if mode != .artwork {
                     panel
                         .padding(.top, 20)
-                        .frame(width: min(size.width * 0.4, 380))
-                        .padding(.trailing, 32)
+                        .frame(width: 343)
+                        .padding(.trailing, 16)
                         .transition(Self.panelTransition)
                 }
             }
             landscapeBottomBar
                 .padding(.horizontal, 40)
-                .padding(.bottom, 8)
         }
     }
 
