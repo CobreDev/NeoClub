@@ -28,7 +28,9 @@ struct SearchView: View {
         .aioBackground()
         .task { await browse.load() }
         .navigationTitle("Search")
-        .searchable(text: $query, prompt: "Episodes, albums, characters, cast")
+        // The system's Liquid Glass field, always under the title: by default it tucks away until the page is pulled down.
+        .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .always),
+                    prompt: Text("Episodes, albums, characters, cast"))
         .task(id: query) { await search() }
     }
 
