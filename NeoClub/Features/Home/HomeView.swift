@@ -8,7 +8,6 @@ struct HomeView: View {
     @State private var home: HomeResponse?
     @State private var error: String?
     @State private var showAccount = false
-    @State private var showIconPicker = false
 
     private var shelvesToShow: [Grouping]? { home?.playlists }
 
@@ -52,19 +51,13 @@ struct HomeView: View {
         .navigationTitle("Home")
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
-                // Tap: Account. Hold: the app icon picker.
-                Menu {
-                    Button { showIconPicker = true } label: { Label("App Icon", systemImage: "app.badge") }
-                } label: {
+                Button { showAccount = true } label: {
                     if let profile = app.profile {
                         ProfileBadge(profile: profile, size: 36, showsName: false)
                             .padding(4)
                             .glassEffect(.regular.interactive(), in: .circle)
                     }
-                } primaryAction: {
-                    showAccount = true
                 }
-                .menuStyle(.button)
                 .buttonStyle(.plain)
                 .accessibilityLabel("Account")
             }
@@ -72,7 +65,6 @@ struct HomeView: View {
             .sharedBackgroundVisibility(.hidden)
         }
         .sheet(isPresented: $showAccount) { AccountView() }
-        .sheet(isPresented: $showIconPicker) { AppIconPicker() }
         .refreshable { await load(force: true) }
         .task { if home == nil { await load() } }
     }

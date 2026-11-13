@@ -9,7 +9,7 @@ settings:
     DEVELOPMENT_TEAM: 4BN7V65X8J
     CODE_SIGN_STYLE: Automatic
     SWIFT_VERSION: "5.0"
-    MARKETING_VERSION: "1.0"
+    MARKETING_VERSION: "1.1"
     # Dev builds are build 0; scripts/make-release.sh sets the build number (YYMMDD, then .2, .3 … for more the same
     # day) and the commit it was built from.
     CURRENT_PROJECT_VERSION: "0"
@@ -25,7 +25,6 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: dev.cobre.aioclub
         TARGETED_DEVICE_FAMILY: "1,2"
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
-        ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES: AppIconGold
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
         GENERATE_INFOPLIST_FILE: YES
         INFOPLIST_KEY_CFBundleDisplayName: AIO Club

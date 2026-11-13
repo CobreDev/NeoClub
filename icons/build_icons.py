@@ -1,5 +1,5 @@
-"""Generates the Liquid Glass Gold app icon (an Icon Composer .icon document) from the white club wordmark.
-Usage: python3 icons/build_icons.py NeoClub/Resources/AppIcons   (needs Pillow). Render previews with Icon Composer's ictool."""
+"""Generates the app icon (the only one: Liquid Glass, gold) (an Icon Composer .icon document) from the white club wordmark.
+Usage: python3 icons/build_icons.py NeoClub/Resources   (needs Pillow). Render previews with Icon Composer's ictool."""
 import json,os,math,sys,collections
 from PIL import Image, ImageDraw, ImageFilter
 S=1024
@@ -67,7 +67,7 @@ def spec(name,default,dark=None,tinted=None,clear=None):
     if clear: v.append({"appearance":"clear","value":clear})
     return v
 
-def make_gold(out,name='AppIconGold',tinted_bg=True):
+def make_gold(out,name='AppIcon',tinted_bg=True):
     """Gold with the original's colours; Dark and Tinted get their own layers, because dark-on-gold becomes dark-on-dark
     (illegible) when the system darkens or tints it: a dark background with a gold wordmark (Dark), and a dark
     background with a white wordmark (Tinted, which the system then colours)."""

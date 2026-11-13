@@ -7,7 +7,7 @@ The app is installed through the owner's own AltStore source (never generate a `
 The build number (`CFBundleVersion`) is the date, `YYMMDD` (`261113` = 13 Nov 2026), with `.2`, `.3` for further builds the same day. It always increases, reads as a date, and can be looked up later:
 
 - `git show build-261113` shows the commit that build was made from. `scripts/make-release.sh` creates the tag.
-- The short commit hash is also baked into the app (`NeoClubCommit` in `Info.plist`, from the `NEOCLUB_COMMIT` build setting) and shown in Account's footer: "AIO Club 1.0 (261113 · 0b90dbf)" (`NeoClub/App/AppVersion.swift`).
+- The short commit hash is also baked into the app (`NeoClubCommit` in `Info.plist`, from the `NEOCLUB_COMMIT` build setting) and shown in Account's footer: "AIO Club 1.1 (261113.2 · <hash>)" (`NeoClub/App/AppVersion.swift`).
 - Dev builds from Xcode are build `0`, commit `dev`.
 - The marketing version is `MARKETING_VERSION` in `project.yml` (1.0).
 
@@ -33,6 +33,7 @@ Tags are local until pushed (`git push origin --tags`); push only when asked.
 
 ## Release history
 
+- **1.1 (261113.2)**, 13 Nov 2026. Now Playing on regular iPhones matched to Music (checked in an iPhone 18 Pro VM), Up Next speed and sleep capsules matched to Music's button row, the Duo's portrait/laptop fold transition, Browse category colours, fixed Up Next capsule menus, and the gold Liquid Glass app icon (the only icon). Built from `main` after merging `icon-glass`.
 - **1.0 (261113)**, 13 Nov 2026. First release. Built three times the same day under the same number: `9883605` (release prep), `5907574` (fold/unfold, category colours), `0b90dbf` (Up Next capsule menus); the shipped one is `build-261113` = `0b90dbf`.
 
 ## Account safety while testing
