@@ -100,6 +100,30 @@ final class AudioPlayer {
         NotificationCenter.default.addObserver(forName: AVAudioSession.routeChangeNotification, object: nil, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated { self?.route = AudioRoute.current }
         }
+        // Another app (or a call) taking the audio stops the player without us being asked to pause. The periodic
+        // observer above only fires while time advances, so nothing else would notice: say so as it happens, and again
+        // on return to the app.
+        NotificationCenter.default.addObserver(forName: AVAudioSession.interruptionNotification, object: nil, queue: .main) { [weak self] note in
+            let began = (note.userInfo?[AVAudioSessionInterruptionTypeKey] as? UInt).flatMap(AVAudioSession.InterruptionType.init) == .began
+            MainActor.assumeIsolated { if began { self?.playbackStopped() } }
+        }
+        NotificationCenter.default.addObserver(forName: AVPlayer.rateDidChangeNotification, object: player, queue: .main) { [weak self] note in
+            let reason = (note.userInfo?[AVPlayer.rateDidChangeReasonKey] as? String).map(AVPlayer.RateDidChangeReason.init(rawValue:))
+            let external = reason == .audioSessionInterrupted || reason == .appBackgrounded
+            MainActor.assumeIsolated { if external { self?.playbackStopped() } }
+        }
+        NotificationCenter.default.addObserver(forName: UIApplication.didBecomeActiveNotification, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.playbackStopped() }
+        }
+    }
+
+    /// The player stopped by itself (interrupted by another app): show it paused, and save where it was.
+    private func playbackStopped() {
+        guard isPlaying, player.rate == 0, player.timeControlStatus == .paused else { return }
+        isPlaying = false
+        persistSession()
+        reportProgress()
+        updateNowPlaying()
     }
 
     /// Where audio is going right now (kept current as headphones, cars and AirPlay come and go).
