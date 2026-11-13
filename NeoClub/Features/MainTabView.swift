@@ -18,6 +18,10 @@ struct MainTabView: View {
         static var paths: [TabID: [Route]] = [:]
     }
 
+    /// The mini player is filled in before the first frame: enabling the tab bar's accessory afterwards made the bar
+    /// and the page behind it relayout once the app was already showing.
+    init() { AudioPlayer.shared.restoreLastSession() }
+
     private func path(_ id: TabID) -> Binding<[Route]> {
         Binding(get: { paths[id] ?? [] }, set: { paths[id] = $0 })
     }
@@ -29,9 +33,7 @@ struct MainTabView: View {
             // Liquid Glass is matched to the card as it lands), so the native version is the same mechanism.
             // Presented from UIKit: Music's open animator, the system zoom transition for the close.
             .onChange(of: player.showNowPlaying) { _, show in NowPlayingPresenter.shared.update(show: show) }
-            // The mini player is always there: bring back whatever was playing last (paused).
             .task {
-                player.restoreLastSession()
                 // Have Now Playing built and laid out before it's first opened.
                 try? await Task.sleep(for: .seconds(1))
                 NowPlayingPresenter.shared.prepare()

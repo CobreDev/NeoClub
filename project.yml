@@ -37,6 +37,9 @@ targets:
       properties:
         UIBackgroundModes: [audio]
         NeoClubCommit: $(NEOCLUB_COMMIT)
+        # The app's own navy (as its loading screen), so a launch never flashes the system's white or black first.
+        UILaunchScreen:
+          UIColorName: LaunchBackground
         UIFileSharingEnabled: true
         LSSupportsOpeningDocumentsInPlace: true
         UIAppFonts: [JacobyICGBlack.ttf, UniversRegular.ttf, UniversBold.ttf]
