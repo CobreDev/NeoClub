@@ -34,9 +34,9 @@ struct GroupingView: View {
                 .episodeSwipeActions(episode)
             }
             if let released = releaseLine {
-                // Like Music's album footer: the date, small and muted.
+                // Like Music's album footer, in the style of the episode number and length under the title.
                 Text(released)
-                    .font(.univers(12, relativeTo: .footnote))
+                    .font(.universBold(13, relativeTo: .footnote))
                     .foregroundStyle(.secondary)
                     .listRowSeparator(.hidden)
                     .listRowBackground(Color.clear)
