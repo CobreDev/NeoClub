@@ -48,6 +48,6 @@ Reference: Music in a vphone VM created as an iPhone 18 Pro (`--device iPhone19,
 
 Up Next's list: Music's first row is at y 280.3; NeoClub's is 9.7 lower, the "From ..." line kept on purpose.
 
-**Mode capsules.** Music's row is four equal capsules (shuffle, repeat, infinity, clear): 74.7 pt wide, 13 pt apart on the phone (about 73 wide and 15 apart on the Duo's outer screen). Speed and sleep timer are now two of those slots, centred (slots 2 and 3), not two half-width capsules.
+**Mode capsules.** Music's row is four equal capsules (shuffle, repeat, infinity, clear): 74.7 pt wide, 13 pt apart on the phone (about 73 wide and 15 apart on the Duo's outer screen). Speed and sleep timer are two capsules with the same 13 pt gap that together fill the same width as Music's four (162.5 pt each on a 402 pt phone).
 
 Not compared on the phone: Info versus Lyrics, landscape (the 18 Pro in landscape), the laptop posture (Duo only).

@@ -357,14 +357,12 @@ struct NowPlayingView: View {
     }
 
     /// Narrow screens only (Apple Music's capsule row of shuffle / repeat / infinity / clear in Up Next): speed and sleep
-    /// timer move up here from the sides of the transport. Music's row is four equal capsules 13 pt apart (74.7 pt wide
-    /// on a 402 pt phone, 73 on the Duo's outer screen), so these are two of those slots, centred.
+    /// timer move up here from the sides of the transport. Music's capsules are 13 pt apart (15 on the Duo's outer
+    /// screen) and fill the column; with two of them instead of four they share the same total width.
     private func modeCapsules(regular: Bool = false) -> some View {
         HStack(spacing: 13) {
-            Color.clear.frame(maxWidth: .infinity).frame(height: 0)
             SpeedButton(capsule: true, height: regular ? 38 : 37)
             SleepTimerButton(capsule: true, height: regular ? 38 : 37)
-            Color.clear.frame(maxWidth: .infinity).frame(height: 0)
         }
         .transition(Self.panelTransition)
     }
