@@ -174,11 +174,15 @@ final class NowPlayingPresenter: NSObject {
         presented = vc
         isPresented = true
         let flies = prepareOpenArtwork()
+        // The sheet's drag can't take hold while the card is still opening: a flick then makes UIKit reverse the
+        // presentation itself, which skips the close's animations (the card jumped, black and offset, then closed again).
+        vc.isModalInPresentation = true
         root.present(vc, animated: true)
         if let coordinator = vc.transitionCoordinator {
             coordinator.animate(alongsideTransition: { [weak self] _ in if flies { self?.startOpenArtwork(vc) } },
                                 completion: { [weak self] ctx in self?.openFinished(vc, cancelled: ctx.isCancelled) })
         } else {
+            vc.isModalInPresentation = false
             artworkFlying = false  // no transition to fly in (it must never stay hidden)
         }
     }
@@ -187,6 +191,7 @@ final class NowPlayingPresenter: NSObject {
     /// sinks back to the bar) without any dismissal callbacks, which left the player marked open with nothing on screen
     /// and the bar unable to open it again.
     private func openFinished(_ vc: UIHostingController<AnyView>, cancelled: Bool) {
+        vc.isModalInPresentation = false
         guard presented === vc else { return }
         if cancelled || vc.presentingViewController == nil {
             trace("open reversed")
