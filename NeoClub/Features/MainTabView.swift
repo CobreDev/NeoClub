@@ -72,6 +72,19 @@ struct MainTabView: View {
             if let i = args.firstIndex(of: "-debugTab"), i + 1 < args.count {
                 tab = ["browse": .browse, "library": .library, "search": .search][args[i + 1]] ?? .home
             }
+            // `-debugCycleNowPlaying <closeAfterSeconds> <count>` opens and closes Now Playing in a loop (tap-style
+            // close through the presenter), for recording the transitions without touch input.
+            if let i = args.firstIndex(of: "-debugCycleNowPlaying") {
+                let hold = i + 1 < args.count ? Double(args[i + 1]) ?? 2.5 : 2.5
+                let count = i + 2 < args.count ? Int(args[i + 2]) ?? 5 : 5
+                try? await Task.sleep(for: .seconds(9))
+                for _ in 0..<count {
+                    player.showNowPlaying = true
+                    try? await Task.sleep(for: .seconds(hold))
+                    player.showNowPlaying = false
+                    try? await Task.sleep(for: .seconds(2.5))
+                }
+            }
             // `-debugAlbum` opens an album page made of placeholder episodes (no account needed; for testing rows).
             if args.contains("-debugAlbum") {
                 let eps = (1...8).map { ["id": "placeholder-\($0)", "name": "#00\($0): Placeholder Episode \($0)", "type": "Audio",
@@ -169,6 +182,8 @@ struct MiniPlayer: View {
         Group {
             if isWide { wideBar } else { compactBar }
         }
+        // Hidden while Now Playing lands in the bar and faded back in after it (see NowPlayingPresenter).
+        .opacity(NowPlayingPresenter.shared.barContentHidden ? 0 : 1)
         .buttonStyle(.plain)
         .padding(.horizontal, 14)
         .contentShape(.rect)

@@ -23,6 +23,10 @@ final class NowPlayingPresenter: NSObject {
     private(set) var isPresented = false
     /// True while the close flies a copy of the artwork into the bar (the player's own artwork is hidden).
     private(set) var isClosing = false
+    /// The mini player's own content (artwork, title, buttons) is hidden while the card lands and fades back in, as
+    /// Music's bar content does (0 to 1 over 0.5 s). Only the SwiftUI content: fading the accessory's view itself
+    /// also fades the bar's glass in from nothing, which showed as a black pill.
+    private(set) var barContentHidden = false
     /// Where the player's artwork is drawn, in the player's own space (NowPlayingPresentation.space), and its corner radius (reported by NowPlayingView).
     @ObservationIgnored var artworkFrame: CGRect = .zero
     @ObservationIgnored var artworkCornerRadius: CGFloat = 10
@@ -97,6 +101,7 @@ final class NowPlayingPresenter: NSObject {
 
     /// Shows or hides Now Playing to match `show`.
     func update(show: Bool) {
+        trace("update(show: \(show)) presented=\(presented != nil) dismissing=\(dismissing != nil)")
         wantsShow = show
         if show { present() } else { dismiss() }
     }
@@ -123,18 +128,32 @@ final class NowPlayingPresenter: NSObject {
         return nil
     }
 
+    /// Debug-only state log (Library/Logs/signin-log.txt).
+    fileprivate func trace(_ line: String) {
+        #if DEBUG
+        SignInLog.write("NP " + line)
+        #endif
+    }
+
     private func present() {
         // Reopened while the last close is still landing: presenting the same controller then makes UIKit throw
         // (it ran the deferred present inside the close's completion and crashed). Open once it has finished.
-        guard presented == nil, dismissing == nil, let root else { return }
+        // A close whose controller is no longer on screen has finished even if its completion never ran.
+        if let stuck = dismissing, stuck.view.window == nil, stuck.presentingViewController == nil { closeFinished() }
+        guard presented == nil, dismissing == nil, let root else {
+            trace("present blocked: presented=\(presented != nil) dismissing=\(dismissing != nil) root=\(self.root != nil)"); return
+        }
         let vc = controller()
-        guard vc.presentingViewController == nil else { return }
+        guard vc.presentingViewController == nil else { trace("present blocked: still attached"); return }
+        trace("present")
         vc.preferredTransition = nil
         vc.modalPresentationStyle = .formSheet
         configureSheet(vc)
         vc.transitioningDelegate = self
         vc.view.alpha = 1
         isClosing = false
+        barContentHidden = false
+        closeAnimationsStarted = false
         openAnimator.source = accessoryView()?.convert(accessoryView()?.bounds ?? .zero, to: nil)
         presented = vc
         isPresented = true
@@ -142,7 +161,8 @@ final class NowPlayingPresenter: NSObject {
     }
 
     private func dismiss() {
-        guard let vc = presented else { return }
+        guard let vc = presented else { trace("dismiss: nothing presented"); return }
+        trace("dismiss (tap)")
         beginClose(vc)
         // Before the dismissal starts, so the stand-ins are in the card when UIKit resizes it (they resize with it).
         runCloseAnimations(vc)
@@ -168,9 +188,14 @@ final class NowPlayingPresenter: NSObject {
         }
     }
 
+    /// Runs when a close is over (idempotent: the tap close, the sheet's completion and its delegate all call it).
     private func closeFinished() {
+        guard dismissing != nil || flyingArtwork != nil || closingStage != nil else { return }
+        trace("closeFinished wantsShow=\(wantsShow)")
         dismissing?.view.alpha = 1
         dismissing = nil
+        closeAnimationsStarted = false
+        barContentHidden = false
         flyingArtwork?.removeFromSuperview()
         flyingArtwork = nil
         closingStage?.removeFromSuperview()
@@ -181,6 +206,28 @@ final class NowPlayingPresenter: NSObject {
 
     private var flyingArtwork: UIView?
     private var closingStage: UIView?
+    private var closeAnimationsStarted = false
+
+    /// The finger-driven close was cancelled (let go short of the threshold): the sheet springs back, Now Playing is open.
+    fileprivate func closeCancelled(_ vc: UIHostingController<AnyView>) {
+        trace("closeCancelled")
+        presented = vc
+        isPresented = true
+        dismissing = nil
+        wantsShow = true
+        closeAnimationsStarted = false
+        barContentHidden = false
+        isClosing = false
+        vc.view.alpha = 1
+    }
+
+    /// The finger-driven close was let go past the threshold: it's closing now.
+    fileprivate func dragCloseCommitted(_ vc: UIHostingController<AnyView>) {
+        trace("dragCloseCommitted")
+        // Now, not when it ends, so a tap on the bar while the card lands is a request to reopen.
+        AudioPlayer.shared.showNowPlaying = false
+        runCloseAnimations(vc)
+    }
 
     /// Music's animations alongside the sheet's landing (traced 2026-11-12, see the type's notes).
     ///
@@ -190,7 +237,8 @@ final class NowPlayingPresenter: NSObject {
     /// and below the artwork, pinned to the card's top and bottom edges (UIKit resizes them with the card on its
     /// spring), and a copy of the artwork that flies into the bar.
     private func runCloseAnimations(_ vc: UIViewController) {
-        guard let player = vc.view, let card = player.superview else { return }
+        guard !closeAnimationsStarted, let player = vc.view, let card = player.superview else { return }
+        closeAnimationsStarted = true
         let full = player.bounds
         let spring = { UIViewPropertyAnimator(duration: 0, timingParameters:
             UISpringTimingParameters(mass: 1, stiffness: 333.3333, damping: 36.5148, initialVelocity: .zero)) }
@@ -244,15 +292,26 @@ final class NowPlayingPresenter: NSObject {
         closingStage = stage
         player.alpha = 0
 
+        // The card's own background (the sheet's `UIDropShadowView`, opaque in the app's dark appearance) goes clear on
+        // the card's spring, as in Music's trace (white to clear over the landing). Left alone it stays a black pill
+        // over the bar for the half second after the card has landed.
+        var container: UIView? = player
+        while let view = container, String(describing: type(of: view)) != "UIDropShadowView" { container = view.superview }
+        if let container {
+            let clear = spring()
+            clear.addAnimations { container.backgroundColor = UIColor.black.withAlphaComponent(0) }
+            clear.startAnimation()
+        }
+
         // The player fades out on Music's curve (its MPCubicSpring, sampled as this cubic).
         let fade = UIViewPropertyAnimator(duration: 0.7153, controlPoint1: CGPoint(x: 0.1878, y: 0.0023),
                                           controlPoint2: CGPoint(x: 0.5399, y: 0.9629)) { stage.alpha = 0 }
         fade.startAnimation()
 
-        // The bar's content fades in over the landing.
-        if let bar = barContentView() {
-            bar.alpha = 0
-            UIView.animate(withDuration: 0.5) { bar.alpha = 1 }
+        // The bar's content fades in over the landing (just the content: see `barContentHidden`).
+        barContentHidden = true
+        DispatchQueue.main.async { [weak self] in
+            withAnimation(.easeInOut(duration: 0.5)) { self?.barContentHidden = false }
         }
 
         // The artwork flies into the bar's artwork slot on the card's spring, inside the card (so the card clips it).
@@ -270,33 +329,31 @@ final class NowPlayingPresenter: NSObject {
 }
 
 extension NowPlayingPresenter: UISheetPresentationControllerDelegate {
-    /// The sheet's drag started a close.
+    /// The sheet's drag started a close (the finger may still cancel it).
     func presentationControllerWillDismiss(_ presentationController: UIPresentationController) {
-        guard let vc = presented, presentationController.presentedViewController === vc else { return }
+        guard let vc = presented, presentationController.presentedViewController === vc else { trace("willDismiss ignored"); return }
+        trace("willDismiss")
         beginClose(vc)
-        guard let coordinator = vc.transitionCoordinator else { return }
+        guard let coordinator = vc.transitionCoordinator else { dragCloseCommitted(vc); return }
+        // Whether it completes or is cancelled, the transition's own completion settles the state.
+        coordinator.animate(alongsideTransition: nil) { [weak self] ctx in
+            guard let self else { return }
+            if ctx.isCancelled { self.closeCancelled(vc) } else { self.closeFinished() }
+        }
         if coordinator.isInteractive {
             // Music starts its own animations when the finger lifts and the close goes ahead.
             coordinator.notifyWhenInteractionChanges { [weak self] ctx in
-                guard let self else { return }
-                if ctx.isCancelled {
-                    self.presented = vc
-                    self.isPresented = true
-                    self.dismissing = nil
-                } else {
-                    self.runCloseAnimations(vc)
-                }
+                guard let self, !ctx.isCancelled else { return }
+                self.dragCloseCommitted(vc)
             }
         } else {
-            runCloseAnimations(vc)
+            dragCloseCommitted(vc)
         }
     }
 
-    /// A close by dragging finished.
+    /// A close by dragging finished (a backup for the transition's completion above).
     func presentationControllerDidDismiss(_ presentationController: UIPresentationController) {
-        guard dismissing === presentationController.presentedViewController else { return }
-        wantsShow = false
-        AudioPlayer.shared.showNowPlaying = false
+        trace("didDismiss")
         closeFinished()
     }
 }
