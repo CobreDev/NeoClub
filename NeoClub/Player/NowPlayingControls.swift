@@ -148,11 +148,13 @@ struct VolumeBar: View {
         }
 
         /// The system rounds the played part along with its clipping track; Music's has a straight right edge, so
-        /// the fill's own rounding is removed every frame (the track keeps the pill shape and clips the left end).
+        /// the fill's right corners are unmasked (the track keeps the pill shape and clips the left end). Its radius
+        /// is animated by the system while dragging, so zeroing it raced the animation and flickered; the corner
+        /// mask isn't animated.
         @objc private func squareFill() {
             for case let slider as UISlider in allSubviews {
                 for track in slider.subviews.flatMap(\.subviews) where track.clipsToBounds && track.layer.cornerRadius > 0 {
-                    track.subviews.last?.layer.cornerRadius = 0
+                    track.subviews.last?.layer.maskedCorners = [.layerMinXMinYCorner, .layerMinXMaxYCorner]
                 }
             }
         }
