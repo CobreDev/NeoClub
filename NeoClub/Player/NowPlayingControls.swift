@@ -135,6 +135,28 @@ struct VolumeBar: View {
     /// touching it grows the track from 7 to 16 pt and brightens the played part on a spring, like the scrubber's.
     /// MPVolumeView's own slider is that same class, so it gets the style (it is created lazily, hence at layout).
     private final class ThumblessVolumeView: MPVolumeView {
+        private var link: CADisplayLink?
+
+        override func didMoveToWindow() {
+            super.didMoveToWindow()
+            link?.invalidate()
+            link = nil
+            guard window != nil else { return }
+            let l = CADisplayLink(target: self, selector: #selector(squareFill))
+            l.add(to: .main, forMode: .common)
+            link = l
+        }
+
+        /// The system rounds the played part along with its clipping track; Music's has a straight right edge, so
+        /// the fill's own rounding is removed every frame (the track keeps the pill shape and clips the left end).
+        @objc private func squareFill() {
+            for case let slider as UISlider in allSubviews {
+                for track in slider.subviews.flatMap(\.subviews) where track.clipsToBounds && track.layer.cornerRadius > 0 {
+                    track.subviews.last?.layer.cornerRadius = 0
+                }
+            }
+        }
+
         override func layoutSubviews() {
             super.layoutSubviews()
             for case let slider as UISlider in allSubviews where slider.sliderStyle != .thumbless {
