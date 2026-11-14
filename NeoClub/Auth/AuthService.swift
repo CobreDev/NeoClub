@@ -56,7 +56,10 @@ actor AuthService {
                 "refresh_token": current.refreshToken,
             ])
             guard let access = json["access_token"] as? String else {
-                throw AuthError.notSignedIn
+                // Only the server saying the refresh token itself is no good ends the sign-in; an outage, rate limit
+                // or odd reply must not.
+                if json["error"] as? String == "invalid_grant" { throw AuthError.notSignedIn }
+                throw AuthError.tokenExchangeFailed(json["error_description"] as? String ?? "The sign-in server didn't answer")
             }
             return Tokens(accessToken: access, refreshToken: current.refreshToken, identityURL: current.identityURL)
         }
@@ -66,10 +69,11 @@ actor AuthService {
             let new = try await task.value
             store(new)
             return new
-        } catch {
+        } catch AuthError.notSignedIn {
             store(nil)
-            throw error
+            throw AuthError.notSignedIn
         }
+        // Anything else (no connection, a timeout, a server error) leaves the saved sign-in alone to try again later.
     }
 
     func signOut() async {
