@@ -1,4 +1,5 @@
 import Foundation
+import os
 
 /// Typed AIO endpoints. Requests mirror the official client's paths, parameters and bodies.
 enum AIOService {
@@ -63,8 +64,24 @@ enum AIOService {
         return episode
     }
 
+    /// Albums seen so far (the library index's pages, then any page opened), readable from a view's `init`.
+    private static let known = OSAllocatedUnfairLock<[String: Grouping]>(initialState: [:])
+    static func remember(_ groupings: [Grouping]) {
+        known.withLock { for g in groupings { if let id = g.groupingID { $0[id] = g } } }
+    }
+
+    /// What's already known of an album or collection (its page from earlier, else the library index's copy), so a
+    /// page opened by ID alone (Go to Album, a restored page) has its artwork and title in the first frame instead of
+    /// an empty header.
+    static func cachedGrouping(_ id: String) -> Grouping? {
+        known.withLock { $0[id] }
+            ?? api.cached("GET", "/contentgrouping/\(id)", as: GroupingsResponse.self)?.value.contentGroupings?.first
+    }
+
     static func grouping(_ id: String) async throws -> Grouping? {
-        try await api.get("/contentgrouping/\(id)", as: GroupingsResponse.self).contentGroupings?.first
+        let found = try await api.get("/contentgrouping/\(id)", as: GroupingsResponse.self).contentGroupings?.first
+        if let found { remember([found]) }
+        return found
     }
 
     struct GroupingSearch: Encodable {
@@ -216,6 +233,7 @@ actor AlbumIndex {
                 allSaved = false
             }
             guard let list else { return }
+            AIOService.remember(list.contentGroupings ?? [])
             for g in list.contentGroupings ?? [] {
                 guard let id = g.groupingID, let name = g.name else { continue }
                 for e in g.contentList where found[e.id] == nil { found[e.id] = (id, name) }

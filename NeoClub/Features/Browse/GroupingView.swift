@@ -11,7 +11,15 @@ struct GroupingView: View {
     /// Air dates read from an episode's detail: an album's own episode list carries none, but an episode's `in_album` does.
     @State private var airDates: [Date] = []
 
-    private var shown: Grouping? { grouping ?? preview }
+    private var shown: Grouping? { grouping ?? preview ?? saved }
+    /// What's already known of the album when opened by ID alone, filled in before the first frame.
+    @State private var saved: Grouping?
+
+    init(groupingID: String, preview: Grouping?) {
+        self.groupingID = groupingID
+        self.preview = preview
+        _saved = State(initialValue: preview == nil ? AIOService.cachedGrouping(groupingID) : nil)
+    }
     private var episodes: [Episode] { shown?.contentList ?? [] }
     private var playable: [Episode] { episodes.filter(\.isPlayable) }
 
