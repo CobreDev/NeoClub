@@ -8,6 +8,8 @@ struct HomeView: View {
     @State private var home: HomeResponse?
     @State private var error: String?
     @State private var showAccount = false
+    @Environment(\.scenePhase) private var scenePhase
+    @State private var loadedAt: Date?
 
     private var shelvesToShow: [Grouping]? { home?.playlists }
 
@@ -25,7 +27,12 @@ struct HomeView: View {
                     // Offline banner and carousel, then Next Up, Continue Listening, the podcast shelves, Bookmarks and
                     // whatever else the server sends (in its order).
                     NextUpShelf(store: nextUp)
-                    ForEach(shelves.filter(\.isContinue)) { Shelf(shelf: $0) }
+                    if shelves.contains(where: { $0.isContinue && $0.contentList.contains { !$0.isBonus } }) {
+                        ForEach(shelves.filter(\.isContinue)) { Shelf(shelf: $0) }
+                    } else if !nextUp.inProgress.isEmpty {
+                        // The server's shelf is missing or empty: built here from what's started and not finished.
+                        Shelf(shelf: Grouping(name: "Continue where you left off", contentList: nextUp.inProgress))
+                    }
                     ForEach(shelves.filter(\.isPodcast)) { Shelf(shelf: $0) }
                     BookmarksShelf()
                     ForEach(shelves.filter { !$0.isContinue && !$0.isPodcast }) { Shelf(shelf: $0) }
@@ -59,6 +66,11 @@ struct HomeView: View {
         .sheet(isPresented: $showAccount) { AccountView() }
         .refreshable { await load(force: true) }
         .task { if home == nil { await load() } }
+        // Coming back to the app after a while: the saved Home from before is stale (a shelf like Continue Listening
+        // may have appeared since), so it's fetched again rather than waiting for a pull to refresh.
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active, let loadedAt, -loadedAt.timeIntervalSinceNow > 120 { Task { await load() } }
+        }
     }
 
     /// `force` (pull to refresh) also refetches the album catalog behind Next Up.
@@ -68,6 +80,7 @@ struct HomeView: View {
         async let marks: Void = bookmarks.load()
         do {
             home = try await AIOService.home()
+            loadedAt = Date()
             error = nil
             let continuing = home?.playlists?.first { $0.name?.hasPrefix("Continue where you left off") == true }
             await nextUp.refresh(continuing: continuing?.contentList ?? [], history: player.history.map { ($0.id, $0.playedAt) },
@@ -256,6 +269,9 @@ private struct BookmarksShelf: View {
 final class NextUpStore {
     static let shared = NextUpStore()
     private(set) var episodes: [Episode] = []
+    /// Started and not finished, newest first (from the album lists' progress and this app's history): Continue
+    /// Listening's stand-in when the server's shelf is missing.
+    private(set) var inProgress: [Episode] = []
     /// Every numbered episode in every album, in broadcast order. Fetched at most once an hour (the saved copy on
     /// this device is used in between, and shown instantly at launch while a stale one refreshes).
     private var catalog: [Episode] = []
@@ -297,6 +313,18 @@ final class NextUpStore {
             if seeds.count == 6 { break }
         }
         lastSeeds = seeds
+
+        let heard = Dictionary(history.map { ($0.id, $0.at) }, uniquingKeysWith: max)
+        inProgress = catalog
+            .compactMap { e -> (Episode, Date)? in
+                guard !e.isBonus, !isDone(e) else { return nil }
+                let account = e.progress?.isInProgress == true
+                    ? e.progress?.activityAt.flatMap { iso.date(from: $0) ?? ISO8601DateFormatter().date(from: $0) } : nil
+                guard let at = [account, heard[e.id]].compactMap({ $0 }).max() else { return nil }
+                return (e, at)
+            }
+            .sorted { $0.1 > $1.1 }
+            .prefix(10).map(\.0)
 
         episodes = Self.nextEpisodes(catalog: catalog, seeds: seeds, inProgress: Set(continuing.map(\.id)), isDone: isDone)
     }
