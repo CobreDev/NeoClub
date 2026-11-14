@@ -120,3 +120,21 @@ private func episode(_ id: String, name: String? = nil, shortName: String? = nil
         #expect(released("soon").releaseDate == nil)
     }
 }
+
+@Suite struct BonusContentTests {
+    private func episode(name: String, number: String? = nil) -> Episode {
+        let n = number.map { #","episode_number":"\#($0)""# } ?? ""
+        return try! JSONDecoder().decode(Episode.self, from: Data(#"{"id":"a","name":"\#(name)"\#(n)}"#.utf8))
+    }
+
+    @Test func letteredNumbersAndBonusTitlesAreBonus() {
+        #expect(episode(name: "#572d: Odyssey Sings!").isBonus)
+        #expect(episode(name: "Odyssey Sings!", number: "572d").isBonus)
+        #expect(episode(name: "BONUS! A Message from Whit").isBonus)
+    }
+
+    @Test func regularEpisodesAreNot() {
+        #expect(!episode(name: "#1041: Whit's Flop").isBonus)
+        #expect(!episode(name: "Whit's Flop", number: "1041").isBonus)
+    }
+}

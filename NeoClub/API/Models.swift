@@ -167,6 +167,13 @@ struct Episode: Decodable, Identifiable, Hashable {
         if let n = episodeNumber, !n.isEmpty { return "#\(n): \(raw)" }
         return raw
     }
+    /// Bonus content: a lettered number ("#572d: BONUS! …", episode number "572d") or a title that says BONUS.
+    var isBonus: Bool {
+        let raw = name ?? shortName ?? ""
+        if raw.range(of: #"^#\d+[A-Za-z]+\b"#, options: .regularExpression) != nil { return true }
+        if let n = episodeNumber, n.range(of: #"^\d+[A-Za-z]+$"#, options: .regularExpression) != nil { return true }
+        return raw.range(of: "bonus", options: .caseInsensitive) != nil
+    }
     /// Album name, ignoring the server quirk where it repeats the type (e.g. "Episode").
     var albumTitle: String? {
         guard let a = albumName, !a.isEmpty, a != subtype, a != type else { return nil }

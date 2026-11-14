@@ -98,6 +98,10 @@ private struct Shelf: View {
     let shelf: Grouping
 
     var body: some View {
+        if !(isContinue && episodes.isEmpty) { content }
+    }
+
+    private var content: some View {
         VStack(alignment: .leading, spacing: 12) {
             if let gid = shelf.groupingID {
                 NavigationLink(value: Route.grouping(id: gid, preview: shelf)) {
@@ -118,7 +122,7 @@ private struct Shelf: View {
             }
             ScrollView(.horizontal, showsIndicators: false) {
                 LazyHStack(alignment: .top, spacing: 14) {
-                    ForEach(shelf.contentList) { episode in
+                    ForEach(episodes) { episode in
                         NavigationLink(value: Route.episode(episode, groupingID: shelf.groupingID)) {
                             EpisodeCard(episode: episode)
                                 .shelfItem(large: isContinue)
@@ -133,6 +137,9 @@ private struct Shelf: View {
             .scrollTargetBehavior(.viewAligned)
         }
     }
+
+    /// Continue Listening leaves out bonus content.
+    private var episodes: [Episode] { isContinue ? shelf.contentList.filter { !$0.isBonus } : shelf.contentList }
 
     private var isContinue: Bool { shelf.name?.hasPrefix("Continue where you left off") == true }
 
@@ -372,7 +379,7 @@ private struct NextUpShelf: View {
     let store: NextUpStore
 
     var body: some View {
-        let items = store.episodes.filter { !(player.progress(for: $0)?.isComplete ?? false) }
+        let items = store.episodes.filter { !$0.isBonus && !(player.progress(for: $0)?.isComplete ?? false) }
         if !items.isEmpty {
             VStack(alignment: .leading, spacing: 12) {
                 ShelfHeader(title: "Next Up")
