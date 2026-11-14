@@ -22,22 +22,13 @@ struct HomeView: View {
                     CarouselView(items: carousel)
                 }
                 if let shelves = shelvesToShow {
-                    ForEach(Array(shelves.enumerated()), id: \.element.id) { i, shelf in
-                        Shelf(shelf: shelf)
-                        // Next Up and Bookmarks sit right after "Continue Listening" (or first if there isn't one).
-                        #if !SCREENSHOT_DEMO
-                        if i == 0 {
-                            NextUpShelf(store: nextUp)
-                            BookmarksShelf()
-                        }
-                        #endif
-                    }
-                    #if !SCREENSHOT_DEMO
-                    if shelves.isEmpty {
-                        NextUpShelf(store: nextUp)
-                        BookmarksShelf()
-                    }
-                    #endif
+                    // Offline banner and carousel, then Next Up, Continue Listening, the podcast shelves, Bookmarks and
+                    // whatever else the server sends (in its order).
+                    NextUpShelf(store: nextUp)
+                    ForEach(shelves.filter(\.isContinue)) { Shelf(shelf: $0) }
+                    ForEach(shelves.filter(\.isPodcast)) { Shelf(shelf: $0) }
+                    BookmarksShelf()
+                    ForEach(shelves.filter { !$0.isContinue && !$0.isPodcast }) { Shelf(shelf: $0) }
                 } else if let error {
                     ErrorView(message: error) { await load() }
                 } else {
@@ -141,7 +132,7 @@ private struct Shelf: View {
     /// Continue Listening leaves out bonus content.
     private var episodes: [Episode] { isContinue ? shelf.contentList.filter { !$0.isBonus } : shelf.contentList }
 
-    private var isContinue: Bool { shelf.name?.hasPrefix("Continue where you left off") == true }
+    private var isContinue: Bool { shelf.isContinue }
 
     private var displayTitle: String {
         isContinue ? "Continue Listening" : shelf.title
@@ -451,3 +442,9 @@ private struct DemoHome: View {
     private var latestEpisodes: [Episode] { Array((store.newAlbums.first?.contentList ?? []).reversed().prefix(10)) }
 }
 #endif
+
+private extension Grouping {
+    var isContinue: Bool { name?.hasPrefix("Continue where you left off") == true }
+    /// The podcast shelves ("Podcast Year" groupings, or a shelf named for podcasts).
+    var isPodcast: Bool { type == "Podcast Year" || name?.localizedCaseInsensitiveContains("podcast") == true }
+}
