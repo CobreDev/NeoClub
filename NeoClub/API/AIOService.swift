@@ -45,17 +45,20 @@ enum AIOService {
             "player": "true", "recommendations": "true", "tag": "false",
             "series": "false", "parent": "false", "content_grouping_id": groupingID,
         ])
-        // An album that isn't fully out yet can leave its episodes without an album name ("#83: Phase One"). The
-        // library knows which album every episode is in, wherever it was started from; failing that, an episode
-        // alongside it, or the album it was opened from.
-        if episode.albumTitle == nil {
-            if let name = await AlbumIndex.shared.albumName(for: episode.id) {
-                episode.albumName = name
-            } else if let sibling = episode.inAlbum?.lazy.compactMap(\.albumTitle).first {
-                episode.albumName = sibling
-            } else if let groupingID, let album = (try? await grouping(groupingID)) ?? nil, album.type == "Album" {
-                episode.albumName = album.name
-            }
+        // The library knows which album every episode is in, wherever it was started from, and that's what "Go to
+        // Album" opens. An album that isn't fully out yet can leave its episodes without an album name ("#83: Phase
+        // One"): the library's name fills it, failing that an episode alongside it, or the album it was opened from.
+        if let album = await AlbumIndex.shared.album(for: episode.id) {
+            episode.albumID = album.id
+            if episode.albumTitle == nil { episode.albumName = album.name }
+        }
+        if episode.albumTitle == nil, let sibling = episode.inAlbum?.lazy.compactMap(\.albumTitle).first {
+            episode.albumName = sibling
+        }
+        if episode.albumID == nil || episode.albumTitle == nil, let groupingID,
+           let album = (try? await grouping(groupingID)) ?? nil, album.type == "Album" {
+            episode.albumID = groupingID
+            if episode.albumTitle == nil { episode.albumName = album.name }
         }
         return episode
     }
@@ -181,25 +184,25 @@ enum AIOService {
 /// they're normally already saved on this device). Album names don't change, so a saved page is used whatever its age.
 actor AlbumIndex {
     static let shared = AlbumIndex()
-    private var names: [String: String] = [:]
+    private var albums: [String: (id: String, name: String)] = [:]
     /// When the index was last built from the network (nil: only from saved pages, or not at all).
     private var fetchedAt: Date?
     private var builtFromSaved = false
     private static let pageSize = 25
 
-    func albumName(for episodeID: String) async -> String? {
-        if let name = names[episodeID] { return name }
-        if !builtFromSaved && names.isEmpty { await build(fresh: false) }
-        if let name = names[episodeID] { return name }
+    func album(for episodeID: String) async -> (id: String, name: String)? {
+        if let album = albums[episodeID] { return album }
+        if !builtFromSaved && albums.isEmpty { await build(fresh: false) }
+        if let album = albums[episodeID] { return album }
         // Not in what's saved (or in what was fetched a while ago): a newly published album may be missing.
         if let fetchedAt, fetchedAt.timeIntervalSinceNow > -300 { return nil }
         await build(fresh: true)
-        return names[episodeID]
+        return albums[episodeID]
     }
 
     /// From the saved pages when all are there (`fresh` false), else from the network.
     private func build(fresh: Bool) async {
-        var found: [String: String] = [:]
+        var found: [String: (id: String, name: String)] = [:]
         var page = 1, pages = 1
         var allSaved = !fresh
         repeat {
@@ -214,13 +217,13 @@ actor AlbumIndex {
             }
             guard let list else { return }
             for g in list.contentGroupings ?? [] {
-                guard let name = g.name else { continue }
-                for e in g.contentList where found[e.id] == nil { found[e.id] = name }
+                guard let id = g.groupingID, let name = g.name else { continue }
+                for e in g.contentList where found[e.id] == nil { found[e.id] = (id, name) }
             }
             pages = list.metadata?.totalPageCount ?? page
             page += 1
         } while page <= pages && page <= 10
-        names = found
+        albums = found
         builtFromSaved = allSaved
         if fresh { fetchedAt = Date() }
     }

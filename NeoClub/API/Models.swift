@@ -132,6 +132,8 @@ struct Episode: Decodable, Identifiable, Hashable {
     let subtype: String?
     let episodeNumber: String?
     var albumName: String?
+    /// The album's grouping ID, found from the library when the episode is fetched (not part of the response).
+    var albumID: String?
     let description: String?
     let airDate: String?
     /// Milliseconds.

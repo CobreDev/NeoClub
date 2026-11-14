@@ -113,6 +113,13 @@ struct EpisodeView: View {
                             Label("Mark as Played", systemImage: "checkmark.circle")
                         }
                     }
+                    if let albumID = shown.albumID {
+                        Button {
+                            player.navigationRequest = .grouping(id: albumID, preview: nil)
+                        } label: {
+                            Label("Go to Album", systemImage: "square.stack")
+                        }
+                    }
                     ShareLink(item: shown.shareURL) { Label("Share Episode", systemImage: "square.and.arrow.up") }
                 } label: {
                     Label("More", systemImage: "ellipsis")
@@ -137,11 +144,17 @@ struct EpisodeView: View {
                 .multilineTextAlignment(.center)
                 .padding(.top, 20)
             if let album = shown.albumTitle {
-                Text(album)
+                let name = Text(album)
                     .font(.univers(21, relativeTo: .title3))
                     .multilineTextAlignment(.center)
                     .lineLimit(2)
                     .padding(.top, 2)
+                if let albumID = shown.albumID {
+                    NavigationLink(value: Route.grouping(id: albumID, preview: nil)) { name }
+                        .buttonStyle(.plain)
+                } else {
+                    name
+                }
             }
             Text(shown.subtitle)
                 .font(.universBold(13, relativeTo: .footnote))
